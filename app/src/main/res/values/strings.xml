@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">GPX2MS</string>
+
+    <string name="btn_pick">Выбрать файл (GPX/MS)</string>
+
+    <string name="file_not_selected">Файл не выбран</string>
+    <string name="unsupported_file">Поддерживаются только .gpx и .ms</string>
+    <string name="result_placeholder">Результат появится здесь</string>
+    <string name="file_selected">Выбран: %1$s</string>
+    <string name="selection_cancelled">Выбор отменён</string>
+
+    <string name="btn_convert">Конвертировать</string>
+    <string name="no_file_selected">Сначала выбери файл</string>
+    <string name="convert_started">Конвертация…</string>
+
+    <string name="btn_save">Сохранить результат</string>
+    <string name="nothing_to_save">Сначала сконвертируй файл</string>
+    <string name="save_done">Сохранено</string>
+    <string name="save_cancelled">Сохранение отменено</string>
+
+    <string name="btn_share">Поделиться файлом</string>
+    <string name="share_title">Поделиться файлом</string>
+</resources>

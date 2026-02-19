@@ -1,0 +1,58 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+    id 'com.chaquo.python'
+}
+
+android {
+    namespace 'com.example.gpx2ms'   // можешь поменять
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.gpx2ms"  // можешь поменять
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+
+        // Чтобы APK не раздувался:
+        ndk {
+            abiFilters "arm64-v8a", "armeabi-v7a"
+        }
+
+        // (опционально) Если захочешь ставить pip-зависимости:
+        // python {
+        //     pip {
+        //         install "xxx"
+        //     }
+        // }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+}
+
+dependencies {
+    implementation libs.androidx.appcompat
+    implementation libs.material
+    implementation libs.androidx.activity
+    implementation libs.androidx.constraintlayout
+    implementation "com.google.android.material:material:1.12.0"
+
+    // оставь пусто или добавь позже
+}
