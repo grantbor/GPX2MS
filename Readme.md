@@ -1,5 +1,7 @@
 # GPX ↔ customMapSource Converter
 
+WARNING: created with AI assistance!
+
 Утилита для конвертации между:
 
 - **GPX 1.1**
