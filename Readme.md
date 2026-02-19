@@ -2,6 +2,10 @@
 
 WARNING: created with AI assistance!
 
+Конвертер лежит здесь:
+app/src/main/python/converter3.py
+Все остальное - обретка
+
 Утилита для конвертации между:
 
 - **GPX 1.1**
