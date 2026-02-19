@@ -5,11 +5,11 @@ plugins {
 }
 
 android {
-    namespace 'com.example.gpx2ms'   // можешь поменять
+    namespace 'com.example.gpx2ms'
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.example.gpx2ms"  // можешь поменять
+        applicationId "com.example.gpx2ms"
         minSdk 26
         targetSdk 34
         versionCode 1
@@ -17,24 +17,22 @@ android {
 
         // Чтобы APK не раздувался:
         ndk {
-            abiFilters "arm64-v8a", "armeabi-v7a"
+            abiFilters "arm64-v8a"
         }
 
-        // (опционально) Если захочешь ставить pip-зависимости:
-        // python {
-        //     pip {
-        //         install "xxx"
-        //     }
-        // }
+        python {
+            pyc {
+                src false
+            }
+        }
     }
 
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-        }
-        debug {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                    'proguard-rules.pro'
         }
     }
 
@@ -54,5 +52,4 @@ dependencies {
     implementation libs.androidx.constraintlayout
     implementation "com.google.android.material:material:1.12.0"
 
-    // оставь пусто или добавь позже
 }
