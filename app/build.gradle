@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace 'com.example.gpx2ms'
+    namespace 'io.github.grantbor.gpx2ms'
     compileSdk 34
 
     defaultConfig {
