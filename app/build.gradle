@@ -4,6 +4,18 @@ plugins {
     id 'com.chaquo.python'
 }
 
+
+chaquopy {
+    defaultConfig {
+        buildPython "python3.10"
+        pyc {
+            src true
+            pip true
+            stdlib true
+        }
+    }
+}
+
 android {
     namespace 'io.github.grantbor.gpx2ms'
     compileSdk 34
@@ -12,20 +24,15 @@ android {
         applicationId "io.github.grantbor.gpx2ms"
         minSdk 26
         targetSdk 34
-        versionCode 3
-        versionName "0.3"
+        versionCode 4
+        versionName "0.4"
 
         // Чтобы APK не раздувался:
         ndk {
             abiFilters "arm64-v8a"
         }
-
-        python {
-            pyc {
-                src false
-            }
-        }
     }
+
 
     buildTypes {
         release {

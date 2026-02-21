@@ -3,9 +3,7 @@ package io.github.grantbor.gpx2ms
 import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
 import android.widget.Button
@@ -17,6 +15,9 @@ import com.chaquo.python.android.AndroidPlatform
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+
+    private enum class InputKind { NONE, GPX, MS }
+    private var inputKind: InputKind = InputKind.NONE
 
     private var pickedUri: Uri? = null
 
@@ -47,44 +48,25 @@ class MainActivity : AppCompatActivity() {
 
     // --- Pick input GPX/MS ---
     private val pickFile =
-        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val uri = result.data?.data
             if (uri == null) {
                 txtPicked.setText(R.string.selection_cancelled)
                 pickedUri = null
+                inputKind = InputKind.NONE
                 resetResultUi()
-                txtResult.setText(R.string.result_placeholder)
                 updateButtons()
                 return@registerForActivityResult
             }
-
-            val name = getDisplayName(uri)
-            val nameLower = name.lowercase()
-            if (!nameLower.endsWith(".gpx") && !nameLower.endsWith(".ms")) {
-                txtPicked.setText(R.string.unsupported_file)
-                pickedUri = null
-                resetResultUi()
-                txtResult.setText(R.string.result_placeholder)
-                updateButtons()
-                return@registerForActivityResult
-            }
-
-            pickedUri = uri
 
             try {
                 contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-            } catch (_: Exception) {
-                /* provider may not support persistable permission */
-            }
+            } catch (_: Exception) {}
 
-            txtPicked.text = getString(R.string.file_selected, name)
-
-            // New input invalidates previous result and export
-            resetResultUi()
-            txtResult.text = "Input selected.\nPress Convert to generate result."
-            updateButtons()
+            handlePickedUri(uri)
         }
 
     // --- Append: user picks target .ms here (existing file) ---
@@ -179,7 +161,13 @@ class MainActivity : AppCompatActivity() {
         updateButtons()
 
         btnPick.setOnClickListener {
-            pickFile.launch(arrayOf("*/*"))
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = "*/*"
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            }
+            pickFile.launch(intent)
         }
 
         // Convert: generate result into internal output file and memory bytes
@@ -256,8 +244,7 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val inUri = pickedUri
-            if (inUri == null || !getDisplayName(inUri).lowercase().endsWith(".gpx")) {
+            if (inputKind != InputKind.GPX) {
                 txtResult.text = "Append works with GPX input.\nPick a .gpx file first."
                 return@setOnClickListener
             }
@@ -295,7 +282,6 @@ class MainActivity : AppCompatActivity() {
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = lastExportMime
                 putExtra(Intent.EXTRA_STREAM, uri)
-                // We'll also add ClipData + explicit grants (below)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
@@ -493,8 +479,10 @@ class MainActivity : AppCompatActivity() {
         btnConvert.isEnabled = hasInput
 
         // Convert/Append/Save depend on having a conversion result (bytes)
-        btnAppend.isEnabled = hasResult
         btnSave.isEnabled = hasResult
+
+        // Append only makes sense for GPX input
+        btnAppend.isEnabled = hasResult && inputKind == InputKind.GPX
 
         // Share/Open depend on having an exported filesystem URI (Save or Append done)
         val exported = hasResult && lastExportUri != null
@@ -505,10 +493,10 @@ class MainActivity : AppCompatActivity() {
     // --- Play Store helpers ---
     private fun isPackageInstalled(pkg: String): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= 33) {
+            if (android.os.Build.VERSION.SDK_INT >= 33) {
                 packageManager.getPackageInfo(
                     pkg,
-                    PackageManager.PackageInfoFlags.of(0)
+                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
                 )
             } else {
                 @Suppress("DEPRECATION")
@@ -545,6 +533,32 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return uri.toString()
+    }
+
+    private fun handlePickedUri(uri: Uri) {
+        val name = getDisplayName(uri)
+        val nameLower = name.lowercase()
+
+        if (!nameLower.endsWith(".gpx") && !nameLower.endsWith(".ms")) {
+            txtPicked.setText(R.string.unsupported_file)
+            pickedUri = null
+            inputKind = InputKind.NONE
+            resetResultUi()
+            updateButtons()
+            return
+        }
+
+        inputKind = when {
+            nameLower.endsWith(".gpx") -> InputKind.GPX
+            nameLower.endsWith(".ms") -> InputKind.MS
+            else -> InputKind.NONE
+        }
+
+        pickedUri = uri
+        txtPicked.text = getString(R.string.file_selected, name)
+
+        resetResultUi()
+        updateButtons()
     }
 
     private fun makeSuggestedName(inputName: String, outExt: String): String {
