@@ -463,7 +463,101 @@ def build_ms_full(
 
     return ET.ElementTree(root)
 
+def append_gpx_into_ms(
+        existing_ms_path: Path,
+        gpx_path: Path,
+        out_ms_path: Optional[Path] = None,
+        line_mode: str = "none",
+        style_text: Optional[str] = None,
+        keep_existing_title: bool = True,
+) -> Tuple[int, int]:
+    """
+    Append conversion result of GPX into an existing .ms file.
 
+    - Reads existing .ms
+    - Parses its <geojson> FeatureCollection
+    - Converts GPX -> new Feature list
+    - Appends new features to existing features
+    - Writes back to the same file (or to out_ms_path if provided)
+
+    style_text:
+      - None  -> keep existing <style> as is
+      - ""    -> remove <style>
+      - other -> replace/set <style> to given text
+    """
+
+    if out_ms_path is None:
+        out_ms_path = existing_ms_path
+
+    if not existing_ms_path.exists():
+        raise FileNotFoundError(f"MS file not found: {existing_ms_path}")
+    if not gpx_path.exists():
+        raise FileNotFoundError(f"GPX file not found: {gpx_path}")
+
+    # --- Load existing MS XML ---
+    tree = ET.parse(existing_ms_path)
+    root = tree.getroot()
+
+    # --- Find and parse existing GeoJSON ---
+    geo_el = root.find("geojson")
+    if geo_el is None or geo_el.text is None or not geo_el.text.strip():
+        raise ValueError("Existing MS has no <geojson> content to append to.")
+
+    existing_gj = json.loads(geo_el.text.strip())
+    existing_features = existing_gj.get("features")
+    if not isinstance(existing_features, list):
+        existing_features = []
+        existing_gj["features"] = existing_features
+
+    # --- Convert GPX -> MS features (generate a temporary MS, then extract its features) ---
+    title_new, wpts_new, tracks_new = parse_gpx_full(gpx_path)
+
+    tmp_tree = build_ms_full(
+        title=title_new,
+        wpts=wpts_new,
+        tracks=tracks_new,
+        line_mode=line_mode,
+        style_text=DEFAULT_STYLE,  # style handled below (we usually keep existing)
+    )
+    tmp_root = tmp_tree.getroot()
+    tmp_geo_el = tmp_root.find("geojson")
+    if tmp_geo_el is None or tmp_geo_el.text is None:
+        raise ValueError("Internal error: generated MS has no <geojson>.")
+
+    new_gj = json.loads(tmp_geo_el.text.strip())
+    new_features = new_gj.get("features", [])
+    if not isinstance(new_features, list):
+        new_features = []
+
+    # --- Append features ---
+    existing_features.extend(new_features)
+
+    # --- Write updated GeoJSON back ---
+    geo_el.text = json.dumps(existing_gj, ensure_ascii=False, indent=2)
+
+    # --- Title handling ---
+    if not keep_existing_title:
+        name_el = root.find("name")
+        if name_el is None:
+            name_el = ET.SubElement(root, "name")
+        name_el.text = title_new
+
+    # --- Style handling ---
+    if style_text is not None:
+        style_el = root.find("style")
+        if style_text == "":
+            # remove style element if exists
+            if style_el is not None:
+                root.remove(style_el)
+        else:
+            if style_el is None:
+                style_el = ET.SubElement(root, "style")
+            style_el.text = style_text
+
+    # --- Save result ---
+    tree.write(out_ms_path, encoding="utf-8", xml_declaration=True)
+
+    return (len(wpts_new), len(tracks_new))
 # ----------------- CLI -----------------
 
 def main():

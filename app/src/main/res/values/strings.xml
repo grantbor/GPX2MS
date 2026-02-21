@@ -20,4 +20,7 @@
 
     <string name="btn_share">Поделиться файлом</string>
     <string name="share_title">Поделиться файлом</string>
+
+    <string name="append_into_target">Добавить в файл .ms</string>
+    <string name="openGuru">Открыть в Guru Maps</string>
 </resources>

@@ -44,11 +44,33 @@
                 android:textSize="15sp"
                 android:text="@string/btn_convert"/>
 
+
+
+            <Button
+                android:id="@+id/btnAppend"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/append_into_target"
+                android:textSize="15sp"
+                android:layout_marginTop="16dp"
+                android:enabled="false" />
+
+            <Button
+                android:id="@+id/btnOpenGuru"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/openGuru"
+                android:textSize="15sp"
+                android:enabled="true" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:layout_marginTop="10dp">
+
 
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnSave"

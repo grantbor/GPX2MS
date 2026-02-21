@@ -1,75 +1,48 @@
-# GPX ↔ customMapSource Converter
+# GPX2MS
 
-WARNING: created with AI assistance!
-
-Конвертер лежит здесь:
-
-app/src/main/python/converter3.py
-
-Все остальное - обретка
-
-Утилита для конвертации между:
-
-- **GPX 1.1**
-  - Waypoints (`<wpt>`)
-  - Tracks (`<trk>`, `<trkseg>`, `<trkpt>`)
-- **customMapSource + GeoJSON**
-  - `Point`
-  - `LineString`
-  - `MultiLineString`
+Конвертер GPX ↔ MS (customMapSource).
 
 Поддерживается:
 
-- ✅ Треки, сохранённые с навигатора
-- ✅ Пользовательские точки
-- ✅ Высота (`ele`)
-- ✅ Время (`time`)
-- ✅ Несколько сегментов трека
-- ✅ Генерация сетки по именованным точкам (опционально)
-- ✅ Обратная конверсия без потери структуры
+- ✅ GPX → MS
+- ✅ MS → GPX
+- ✅ Настройка line-mode
+- ✅ Настройка style
+- ✅ Append GPX → существующий `.ms` (добавление новых объектов без удаления старых)
+
+Проект написан на Python.  
+Android-приложение является оболочкой над этим конвертером (через Chaquopy).
+
+Проект создан с использованием ИИ
 
 ---
 
-# Требования
+# Установка
 
-- Python 3.9+
-- Внешние библиотеки **не требуются**
-
-Проверка версии Python:
+Требуется Python 3.8+
 
 ```bash
-python --version
+git clone https://github.com/grantbor/GPX2MS.git
+cd GPX2MS
 ```
 
 ---
 
-# Быстрый старт
+# Использование
 
-GPX → MS:
-
-```bash
-python converter.py input.gpx output.ms
-```
-
-MS → GPX:
+## Полный синтаксис
 
 ```bash
-python converter.py input.ms output.gpx
-```
-
-Формат назначения определяется автоматически.
-
----
-
-# Полный синтаксис
-
-```bash
-python converter.py INPUT OUTPUT [--to {gpx,ms}] [--line-mode {none,orth,snake,both}] [--style STYLE]
+python converter.py INPUT OUTPUT \
+    [--to {gpx,ms}] \
+    [--append] \
+    [--line-mode {none,orth,snake,both}] \
+    [--style STYLE]
 ```
 
 ---
 
-# Аргументы
+# Параметры
 
 ## INPUT
 
@@ -77,237 +50,120 @@ python converter.py INPUT OUTPUT [--to {gpx,ms}] [--line-mode {none,orth,snake,b
 
 - `.gpx`
 - `.ms`
-- `.xml`
 
 ## OUTPUT
 
-Выходной файл.
+Выходной файл:
+
+- `.ms` при конвертации из GPX
+- `.gpx` при конвертации из MS
 
 ---
 
-# Опции
+## `--to`
 
-## `--to {gpx,ms}`
-
-Принудительное указание целевого формата.
-
-Если не указан — выбирается автоматически (противоположный входному).
-
-Примеры:
+Явно указать направление конвертации:
 
 ```bash
---to ms
 --to gpx
+--to ms
+```
+
+Если не указано — определяется автоматически по расширению файлов.
+
+---
+
+## `--append`
+
+Режим добавления (append).
+
+Используется **только при GPX → MS**.
+
+Вместо создания нового `.ms`:
+
+1. Конвертер читает существующий `.ms` (файл OUTPUT должен существовать).
+2. Конвертирует GPX в GeoJSON features.
+3. Добавляет новые features в массив `features` внутри `<geojson>`.
+4. Сохраняет обновлённый `.ms`.
+
+⚠️ Важно:
+
+- OUTPUT должен быть существующим `.ms` файлом.
+- Если файл не существует — используйте обычную конвертацию без `--append`.
+- Рекомендуется сделать резервную копию `.ms` перед использованием append.
+
+### Пример
+
+```bash
+python converter.py input.gpx map.ms --append
 ```
 
 ---
 
-## `--line-mode {none,orth,snake,both}`
+## `--line-mode`
 
-Используется **только при конвертации GPX → MS**  
-и применяется только к waypoints с именами сеточного типа:
-
-```
-A1, B2, AA-12, AH_23 и т.п.
-```
-
-### Режимы
-
-| Режим | Поведение |
-|--------|-----------|
-| none   | Без генерации линий |
-| orth   | Горизонтали + вертикали |
-| snake  | Одна непрерывная “змейка” |
-| both   | И orth, и snake |
+- `none` — без изменений
+- `orth` — ортогональные линии
+- `snake` — змейка
+- `both` — комбинированный режим
 
 Пример:
 
 ```bash
-python converter.py grid.gpx grid.ms --line-mode orth
+python converter.py input.gpx output.ms --line-mode orth
 ```
-
-⚠ Для обычных треков навигатора этот параметр **не нужен**.
 
 ---
 
 ## `--style`
 
-Текст тега `<style>` для MS-файла.
-
-Убрать стиль полностью:
+Позволяет задать стиль объектов при конвертации GPX → MS.
 
 ```bash
---style ""
+python converter.py input.gpx output.ms --style hiking
 ```
 
 ---
 
-# Примеры использования
+# Примеры
 
----
-
-## 1️⃣ Обычный трек навигатора (trk + wpt)
-
-GPX → MS:
+## GPX → MS (новый файл)
 
 ```bash
-python converter.py Navigator.gpx Navigator.ms
+python converter.py track.gpx map.ms
 ```
 
-MS → GPX:
+## GPX → MS (append)
 
 ```bash
-python converter.py Navigator.ms Navigator_back.gpx
+python converter.py new_track.gpx existing_map.ms --append
 ```
 
-Что происходит:
-
-- `<wpt>` → GeoJSON `Point`
-- `<trk>/<trkseg>` → `MultiLineString`
-- `<ele>` → Z-координата
-- `<time>` → properties.times
-
----
-
-## 2️⃣ Сетка точек (A1, B2, …)
-
-Горизонтали + вертикали:
+## MS → GPX
 
 ```bash
-python converter.py Grid.gpx Grid.ms --line-mode orth
-```
-
-Змейка:
-
-```bash
-python converter.py Grid.gpx Grid.ms --line-mode snake
-```
-
-Оба режима:
-
-```bash
-python converter.py Grid.gpx Grid.ms --line-mode both
+python converter.py map.ms track.gpx
 ```
 
 ---
 
-## 3️⃣ Принудительное указание формата
+# Android wrapper
 
-```bash
-python converter.py file.gpx file.ms --to ms
-```
+Android-приложение является оболочкой над Python-конвертером.
 
----
-
-# Поддерживаемая структура GPX
-
-## Waypoints
-
-```xml
-<wpt lat="..." lon="...">
-  <name>PointName</name>
-  <ele>123</ele>
-  <time>...</time>
-</wpt>
-```
-
-Конвертируется в GeoJSON `Point`.
+- **Convert** — создаёт результат и предлагает Save / Share / Open in Guru Maps / Append.
+- **Append** — предлагает выбрать target `.ms` и дописывает в него данные из выбранного `.gpx`.
 
 ---
 
-## Tracks
+# Ограничения
 
-```xml
-<trk>
-  <name>TrackName</name>
-  <trkseg>
-    <trkpt lat="..." lon="...">
-      <ele>...</ele>
-      <time>...</time>
-    </trkpt>
-  </trkseg>
-</trk>
-```
-
-Конвертируется в GeoJSON `MultiLineString`.
-
-Если сегментов несколько — создаётся несколько линий внутри MultiLineString.
+- Append работает только для GPX → MS.
+- OUTPUT при использовании `--append` должен существовать.
+- Конвертер предполагает корректную структуру GPX и MS.
 
 ---
 
-# Обратная конверсия MS → GPX
+# Лицензия
 
-| GeoJSON | GPX |
-|----------|------|
-| Point | `<wpt>` |
-| LineString | `<trk>` |
-| MultiLineString | `<trk>` с несколькими `<trkseg>` |
-
-Сохраняются:
-
-- координаты
-- высота
-- временные метки (если присутствуют)
-
----
-
-# Упаковка в .exe (Windows)
-
-## Установка PyInstaller
-
-```bash
-pip install pyinstaller
-```
-
-## Сборка
-
-```bash
-pyinstaller --onefile --name converter converter.py
-```
-
-Готовый файл:
-
-```
-dist/converter.exe
-```
-
-Запуск:
-
-```bash
-dist\\converter.exe Navigator.gpx Navigator.ms
-```
-
----
-
-# Частые ошибки
-
-## ❌ unrecognized arguments: -line-mode
-
-Нужно использовать два дефиса:
-
-```bash
---line-mode
-```
-
----
-
-## ❌ Пустой результат
-
-Если GPX содержит только `<trk>` без `<wpt>`,  
-grid-режимы (`orth`, `snake`) не применяются — это нормально.
-
----
-
-# Рекомендации
-
-- Для обычных треков навигатора запускайте без `--line-mode`
-- Grid-режим используйте только для сеток точек
-- Проверяйте результат в GIS-программе или целевом приложении
-
----
-
-# Версия
-
-GPX ↔ customMapSource Converter  
-Поддержка: GPX 1.1 + customMapSource (GeoJSON)
-
+MIT License
