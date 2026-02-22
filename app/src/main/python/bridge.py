@@ -46,7 +46,7 @@ def convert(
                 # если style == "" -> не трогаем существующий style
                 style_override = None if style == "" else style
 
-                wpts_count, tracks_count = converter3.append_gpx_into_ms(
+                added, skipped = converter3.append_gpx_into_ms(
                     existing_ms_path=out,
                     gpx_path=inp,
                     out_ms_path=out,
@@ -54,7 +54,7 @@ def convert(
                     style_text=style_override,
                     keep_existing_title=True,
                 )
-                return f"OK: GPX appended into MS | added_waypoints={wpts_count} added_tracks={tracks_count}"
+                return f"Append: +{added}, duplicates skipped: {skipped}"
 
             # NORMAL MODE: создаём новый MS
             title, wpts, tracks = converter3.parse_gpx_full(inp)
