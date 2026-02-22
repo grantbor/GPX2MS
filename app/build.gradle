@@ -24,8 +24,8 @@ android {
         applicationId "io.github.grantbor.gpx2ms"
         minSdk 26
         targetSdk 34
-        versionCode 5
-        versionName "0.5"
+        versionCode 6
+        versionName "0.6"
 
         // Чтобы APK не раздувался:
         ndk {
