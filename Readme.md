@@ -23,7 +23,7 @@ Android-приложение является оболочкой над этим
 
 ```bash
 git clone https://github.com/grantbor/GPX2MS.git
-cd GPX2MS
+cd GPX2MS2/app/src/main/python/
 ```
 
 ---
