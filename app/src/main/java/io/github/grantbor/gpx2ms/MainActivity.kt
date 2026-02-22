@@ -195,7 +195,16 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 // Copy input to internal storage for Python
-                val inFile = File(filesDir, "input.$inExt")
+                val originalStem = inName.substringBeforeLast('.', inName)
+
+                // оставляем Unicode (кириллица ок), убираем только опасное для пути
+                val safeStem = originalStem
+                    .replace('\u0000', '_')           // NUL
+                    .replace('/', '_')                // path separator
+                    .replace('\\', '_')               // windows separator (на всякий)
+                    .trim()
+                    .ifEmpty { "input" }              // fallback
+                val inFile = File(filesDir, "$safeStem.$inExt")
                 contentResolver.openInputStream(uri)!!.use { input ->
                     inFile.outputStream().use { output ->
                         input.copyTo(output)
