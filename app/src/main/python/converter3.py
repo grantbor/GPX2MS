@@ -381,11 +381,11 @@ def parse_ms_full(path: Path) -> Tuple[str, List[NamedPoint], List[Track], Optio
 
 
 def build_ms_full(
-    title: str,
-    wpts: List[NamedPoint],
-    tracks: List[Track],
-    line_mode: str = "none",   # grid helper for WAYPOINTS only: none|orth|snake|both
-    style_text: str = DEFAULT_STYLE,
+        title: str,
+        wpts: List[NamedPoint],
+        tracks: List[Track],
+        line_mode: str = "none",   # grid helper for WAYPOINTS only: none|orth|snake|both
+        style_text: str = DEFAULT_STYLE,
 ) -> ET.ElementTree:
     root = ET.Element("customMapSource", {"overlay": "true"})
     ET.SubElement(root, "name").text = title
@@ -463,6 +463,92 @@ def build_ms_full(
 
     return ET.ElementTree(root)
 
+# ----------------- Dedup helpers (GeoJSON features) -----------------
+
+def _round_num(x: Any, ndigits: int = 7) -> Any:
+    """Round floats consistently; leave other types as-is."""
+    try:
+        if isinstance(x, float):
+            return round(x, ndigits)
+        if isinstance(x, int):
+            return x
+    except Exception:
+        pass
+    return x
+
+
+def _norm_coords(coords: Any) -> Any:
+    """Normalize coordinates recursively (Point -> [lon,lat,...], MultiLineString -> nested lists)."""
+    if isinstance(coords, (list, tuple)):
+        return [_norm_coords(c) for c in coords]
+    return _round_num(coords)
+
+
+def _norm_props(props: Any) -> Dict[str, Any]:
+    """Normalize only stable keys that matter for deduplication."""
+    if not isinstance(props, dict):
+        return {}
+
+    # Keys that define identity for MS features.
+    keys = ("kind", "name", "track_name", "time", "times", "desc", "sym")
+
+    out: Dict[str, Any] = {}
+    for k in keys:
+        if k in props:
+            v = props.get(k)
+            if k == "times":
+                out[k] = _norm_coords(v)
+            else:
+                out[k] = v
+    return out
+
+
+def _feature_signature(feat: Any) -> Optional[str]:
+    """Build a stable signature for a GeoJSON Feature. Returns None if malformed."""
+    if not isinstance(feat, dict):
+        return None
+
+    geom = feat.get("geometry")
+    props = feat.get("properties")
+
+    if not isinstance(geom, dict):
+        return None
+
+    sig_obj = {
+        "type": geom.get("type"),
+        "coords": _norm_coords(geom.get("coordinates")),
+        "props": _norm_props(props),
+    }
+
+    try:
+        return json.dumps(sig_obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        return None
+
+
+def _dedup_features(existing_features: List[Any], new_features: List[Any]) -> Tuple[List[Any], int]:
+    """Filter new_features removing those already present in existing_features."""
+    seen: set[str] = set()
+    for f in existing_features:
+        s = _feature_signature(f)
+        if s is not None:
+            seen.add(s)
+
+    filtered: List[Any] = []
+    removed = 0
+    for f in new_features:
+        s = _feature_signature(f)
+        if s is None:
+            filtered.append(f)  # safer than dropping
+            continue
+        if s in seen:
+            removed += 1
+            continue
+        seen.add(s)
+        filtered.append(f)
+
+    return filtered, removed
+
 def append_gpx_into_ms(
         existing_ms_path: Path,
         gpx_path: Path,
@@ -471,6 +557,7 @@ def append_gpx_into_ms(
         style_text: Optional[str] = None,
         keep_existing_title: bool = True,
 ) -> Tuple[int, int]:
+
     """
     Append conversion result of GPX into an existing .ms file.
 
@@ -528,9 +615,12 @@ def append_gpx_into_ms(
     new_features = new_gj.get("features", [])
     if not isinstance(new_features, list):
         new_features = []
+    # --- Append features (with dedup) ---
+    filtered_new_features, duplicates_skipped = _dedup_features(existing_features, new_features)
+    existing_features.extend(filtered_new_features)
 
-    # --- Append features ---
-    existing_features.extend(new_features)
+    added_objects = len(filtered_new_features)
+    # duplicates_skipped already computed
 
     # --- Write updated GeoJSON back ---
     geo_el.text = json.dumps(existing_gj, ensure_ascii=False, indent=2)
@@ -557,13 +647,16 @@ def append_gpx_into_ms(
     # --- Save result ---
     tree.write(out_ms_path, encoding="utf-8", xml_declaration=True)
 
-    return (len(wpts_new), len(tracks_new))
+    return (added_objects, duplicates_skipped)
 # ----------------- CLI -----------------
 
 def main():
     parser = argparse.ArgumentParser(description="Convert between GPX (wpt+trk) and customMapSource+GeoJSON.")
     parser.add_argument("input")
     parser.add_argument("output")
+    parser.add_argument("--append", action="store_true",
+                        help="Append GPX conversion result into an existing MS file (output).")
+
     parser.add_argument("--to", choices=["gpx", "ms"], default=None,
                         help="Target format (default: opposite of input).")
 
@@ -581,6 +674,20 @@ def main():
 
     src = detect_format(inp)
     dst = args.to if args.to else ("ms" if src == "gpx" else "gpx")
+    if args.append:
+        if not (src == "gpx" and dst == "ms"):
+            raise SystemExit("--append is only supported for GPX input -> MS output.")
+        added, skipped = append_gpx_into_ms(
+            existing_ms_path=out,
+            gpx_path=inp,
+            out_ms_path=out,
+            line_mode=args.line_mode,
+            style_text=None,
+            keep_existing_title=True,
+        )
+        print(f"Append: +{added}, duplicates skipped: {skipped}")
+        return
+
 
     if src == "gpx" and dst == "ms":
         title, wpts, tracks = parse_gpx_full(inp)
