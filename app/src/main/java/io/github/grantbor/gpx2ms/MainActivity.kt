@@ -160,6 +160,9 @@ class MainActivity : AppCompatActivity() {
         resetResultUi()
         updateButtons()
 
+        // Optional housekeeping: delete old run dirs (keeps cache small)
+        cleanupOldRunDirs(maxAgeHours = 24)
+
         btnPick.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
@@ -170,8 +173,7 @@ class MainActivity : AppCompatActivity() {
             pickFile.launch(intent)
         }
 
-        // Convert: generate result into internal output file and memory bytes
-        // (does NOT export to filesystem by itself)
+        // Convert: generate result into per-run cache dir and memory bytes
         btnConvert.setOnClickListener {
             val uri = pickedUri
             if (uri == null) {
@@ -194,17 +196,11 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                // Copy input to internal storage for Python
+                val runDir = createRunDir()
                 val originalStem = inName.substringBeforeLast('.', inName)
+                val safeStem = sanitizeStem(originalStem)
 
-                // оставляем Unicode (кириллица ок), убираем только опасное для пути
-                val safeStem = originalStem
-                    .replace('\u0000', '_')           // NUL
-                    .replace('/', '_')                // path separator
-                    .replace('\\', '_')               // windows separator (на всякий)
-                    .trim()
-                    .ifEmpty { "input" }              // fallback
-                val inFile = File(filesDir, "$safeStem.$inExt")
+                val inFile = File(runDir, "$safeStem.$inExt")
                 contentResolver.openInputStream(uri)!!.use { input ->
                     inFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -212,7 +208,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val outExt = if (inExt == "gpx") "ms" else "gpx"
-                val outFile = File(filesDir, "output.$outExt")
+                val outFile = File(runDir, "output.$outExt")
 
                 txtResult.text = "CONVERT\n2/2 Running…"
 
@@ -241,6 +237,7 @@ class MainActivity : AppCompatActivity() {
 
                 txtResult.text =
                     "$pyResult\n\nГотово.\nТеперь можно: Append (в существующий .ms) / Save (создать файл) / Share / Open in Guru."
+
             } catch (e: Exception) {
                 txtResult.text = "CONVERT FAILED ❌\n${e.message}\n\n$e"
             }
@@ -304,9 +301,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     pendingRevokePkgs.add(pkg)
-                } catch (_: Exception) {
-                    /* ok */
-                }
+                } catch (_: Exception) { /* ok */ }
             }
             pendingRevokeUri = uri
 
@@ -347,9 +342,7 @@ class MainActivity : AppCompatActivity() {
                 grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 pendingRevokeUri = uri
                 pendingRevokePkgs.add(targetPkg)
-            } catch (_: Exception) {
-                /* ok */
-            }
+            } catch (_: Exception) { /* ok */ }
 
             viewIntent.clipData = ClipData.newUri(contentResolver, lastExportName, uri)
             viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -357,7 +350,6 @@ class MainActivity : AppCompatActivity() {
             try {
                 startActivity(viewIntent)
             } catch (_: Exception) {
-                // Fallback: open with any capable viewer (also strengthened)
                 val fallback = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, mime)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -371,15 +363,12 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
-        // Revoke temporary URI grants after returning to our app
         val uri = pendingRevokeUri ?: return
         if (pendingRevokePkgs.isEmpty()) return
 
         try {
             revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Exception) {
-            /* ok */
-        }
+        } catch (_: Exception) { /* ok */ }
 
         pendingRevokeUri = null
         pendingRevokePkgs.clear()
@@ -404,20 +393,20 @@ class MainActivity : AppCompatActivity() {
 
             val beforeSize = try {
                 contentResolver.openFileDescriptor(targetUri, "r")?.statSize ?: -1L
-            } catch (_: Exception) {
-                -1L
-            }
+            } catch (_: Exception) { -1L }
 
-            // Copy GPX to internal
-            val inFile = File(filesDir, "input.gpx")
+            val runDir = createRunDir()
+
+            // Copy GPX to per-run cache dir
+            val inFile = File(runDir, "input.gpx")
             contentResolver.openInputStream(gpxUri)!!.use { input ->
                 inFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
 
-            // Copy target MS to internal output.ms (Python will append into it)
-            val outFile = File(filesDir, "output.ms")
+            // Copy target MS to per-run cache dir output.ms (Python will append into it)
+            val outFile = File(runDir, "output.ms")
             contentResolver.openInputStream(targetUri)!!.use { input ->
                 outFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -432,10 +421,10 @@ class MainActivity : AppCompatActivity() {
                 "convert",
                 inFile.absolutePath,
                 outFile.absolutePath,
-                null,   // auto
-                "none", // line_mode
-                "",     // style
-                true    // append
+                null,
+                "none",
+                "",
+                true
             ).toString()
 
             txtResult.text = "APPEND\n3/4 Writing target…"
@@ -447,11 +436,8 @@ class MainActivity : AppCompatActivity() {
 
             val afterSize = try {
                 contentResolver.openFileDescriptor(targetUri, "r")?.statSize ?: -1L
-            } catch (_: Exception) {
-                -1L
-            }
+            } catch (_: Exception) { -1L }
 
-            // Update in-memory result (so Save can still work immediately if needed)
             outputBytes = bytes
             hasResult = true
             suggestedOutName = targetName
@@ -465,6 +451,7 @@ class MainActivity : AppCompatActivity() {
 
             txtResult.text =
                 "$pyResult\n\nDONE Appended into:\n$targetName\nSize: $beforeSize → $afterSize bytes"
+
         } catch (e: Exception) {
             txtResult.text = "APPEND FAILED ❌\n${e.message}\n\n$e"
         }
@@ -487,13 +474,9 @@ class MainActivity : AppCompatActivity() {
         val hasInput = pickedUri != null
         btnConvert.isEnabled = hasInput
 
-        // Convert/Append/Save depend on having a conversion result (bytes)
         btnSave.isEnabled = hasResult
-
-        // Append only makes sense for GPX input
         btnAppend.isEnabled = hasResult && inputKind == InputKind.GPX
 
-        // Share/Open depend on having an exported filesystem URI (Save or Append done)
         val exported = hasResult && lastExportUri != null
         btnShare.isEnabled = exported
         btnOpenGuru.isEnabled = exported
@@ -521,9 +504,8 @@ class MainActivity : AppCompatActivity() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$appId")))
             return
-        } catch (_: ActivityNotFoundException) {
-            // fallback below
-        }
+        } catch (_: ActivityNotFoundException) { /* fallback below */ }
+
         startActivity(
             Intent(
                 Intent.ACTION_VIEW,
@@ -579,9 +561,45 @@ class MainActivity : AppCompatActivity() {
         val lower = name.lowercase()
         return when {
             lower.endsWith(".gpx") -> "application/gpx+xml"
-            // MS is a custom XML-ish format; many apps accept octet-stream
             lower.endsWith(".ms") -> "application/octet-stream"
             else -> "application/octet-stream"
+        }
+    }
+
+    private fun sanitizeStem(originalStem: String): String {
+        return originalStem
+            .replace('\u0000', '_')
+            .replace('/', '_')
+            .replace('\\', '_')
+            .trim()
+            .ifEmpty { "input" }
+    }
+
+    private fun createRunDir(): File {
+        val runs = File(cacheDir, "runs")
+        if (!runs.exists()) runs.mkdirs()
+
+        // timestamp + random to avoid collisions
+        val ts = System.currentTimeMillis()
+        val rnd = java.util.UUID.randomUUID().toString().take(8)
+        val dir = File(runs, "run_${ts}_$rnd")
+        dir.mkdirs()
+        return dir
+    }
+
+    private fun cleanupOldRunDirs(maxAgeHours: Int) {
+        val runs = File(cacheDir, "runs")
+        if (!runs.exists() || !runs.isDirectory) return
+
+        val now = System.currentTimeMillis()
+        val maxAgeMs = maxAgeHours.toLong() * 60L * 60L * 1000L
+
+        runs.listFiles()?.forEach { f ->
+            if (!f.isDirectory) return@forEach
+            val age = now - f.lastModified()
+            if (age > maxAgeMs) {
+                f.deleteRecursively()
+            }
         }
     }
 }

@@ -1,20 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <queries>
         <package android:name="com.bodunov.galileo" />
         <package android:name="com.bodunov.GalileoPro" />
 
-        <!-- (опционально) если хочешь, чтобы система “видела” приложения, способные открыть GPX -->
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:mimeType="application/gpx+xml" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/xml" />
+        </intent>
     </queries>
 
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
