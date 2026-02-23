@@ -44,55 +44,48 @@
                 android:textSize="15sp"
                 android:text="@string/btn_convert"/>
 
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSave"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_save"
+                android:textSize="15sp"
+                android:layout_marginTop="16dp"
+                app:strokeColor="@color/outlined_button_stroke"
+                android:enabled="false" />
 
-
-            <Button
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnAppend"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/append_into_target"
                 android:textSize="15sp"
-                android:layout_marginTop="16dp"
+                app:strokeColor="@color/outlined_button_stroke"
                 android:enabled="false" />
 
-            <Button
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnOpenGuru"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/openGuru"
                 android:textSize="15sp"
+                app:strokeColor="@color/outlined_button_guru"
                 android:enabled="true" />
 
-            <LinearLayout
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShare"
+                style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="10dp">
+                android:text="@string/btn_share"
+                android:textSize="15sp"
+                app:strokeColor="@color/outlined_button_share"
+                android:enabled="true" />
 
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnSave"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/btn_save"
-                    android:textSize="15sp"
-                    android:enabled="false"/>
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnShare"
-                    style="@style/Widget.Material3.Button.OutlinedButton"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginStart="10dp"
-                    android:text="@string/btn_share"
-                    android:textSize="15sp"
-                    android:enabled="false"/>
-            </LinearLayout>
 
             <TextView
                 android:id="@+id/txtResult"
