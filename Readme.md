@@ -173,12 +173,12 @@ source .venv/bin/activate
 pip install -U pip
 pip install PySide6 pyinstaller
 pyinstaller --noconfirm --windowed --onedir gpx2ms.py \
-  --add-data "converter3.py:."
+  --hidden-import "converter3.py:."
 ```
   ---OR---
 ```  
 pyinstaller --noconfirm --windowed --onefile gpx2ms.py \
-  --add-data "converter3.py:."
+  --hidden-import "converter3.py:."
 ```
 ### Windows
 
@@ -188,12 +188,12 @@ py -m venv .venv
 pip install -U pip
 pip install PySide6 pyinstaller
 pyinstaller --noconfirm --windowed --onedir gpx2ms.py `
-  --add-data "converter3.py;."
+  --hidden-import "converter3.py;."
 ```
 ---OR---
 ```
 pyinstaller --noconfirm --windowed --onefile gpx2ms.py `
-  --add-data "converter3.py;."
+  --hidden-import "converter3.py;."
 ```
 
 
