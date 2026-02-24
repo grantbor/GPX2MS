@@ -156,6 +156,48 @@ Android-приложение является оболочкой над Python-�
 
 ---
 
+# Графическая оболочка
+
+```bash
+cd app/src/main/python/
+python gpx2ms.py
+```
+
+## Сборка с помощью Pyinstaller
+
+### Linux
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install PySide6 pyinstaller
+pyinstaller --noconfirm --windowed --onedir gpx2ms.py \
+  --add-data "converter3.py:."
+```
+  ---OR---
+```  
+pyinstaller --noconfirm --windowed --onefile gpx2ms.py \
+  --add-data "converter3.py:."
+```
+### Windows
+
+```PowerShell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -U pip
+pip install PySide6 pyinstaller
+pyinstaller --noconfirm --windowed --onedir gpx2ms.py `
+  --add-data "converter3.py;."
+```
+---OR---
+```
+pyinstaller --noconfirm --windowed --onefile gpx2ms.py `
+  --add-data "converter3.py;."
+```
+
+
+
 # Ограничения
 
 - Append работает только для GPX → MS.
