@@ -53,16 +53,16 @@ def parse_xml_tolerant(path: Path) -> ET.ElementTree:
 GPX_NS = "http://www.topografix.com/GPX/1/1"
 ET.register_namespace("", GPX_NS)
 
-CIRCLE_SVG = ""
+CIRCLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="#888"/></svg>'
 CIRCLE_SVG_B64 = base64.b64encode(CIRCLE_SVG.encode("utf-8")).decode("ascii")
 
 DEFAULT_STYLE = (
     'node { text: eval(tag("name")); details-text: eval(tag("name")); '
     'details-description: eval(tag("name")); text-color:black; font-stroke-width:5px; '
-    "font-stroke-color:yellow; "
+    'font-stroke-color:yellow; '
     f'icon-image: eval(data("{CIRCLE_SVG_B64}")); '
-    "icon-scale:1; icon-tint:#00FFFF;} "
-    "line { color:#00FFFF; width:3px; }"
+    'icon-scale:1; icon-tint:#00FFFF;} '
+    'line { color:#00FFFF; width:3px; }'
 )
 
 # Grid-ish names: A1, a-01, AA 12, ah_23, etc.
@@ -117,7 +117,22 @@ def detect_format(path: Path) -> str:
 
 
 # ----------------- GPX parsing/building -----------------
+def _parse_point_element(el: ET.Element, is_wpt: bool) -> NamedPoint:
+    lat = float(el.attrib["lat"])
+    lon = float(el.attrib["lon"])
+    ele = 0.0
+    ele_text = _find_text(el, "ele")
+    if ele_text:
+        try:
+            ele = float(ele_text)
+        except ValueError:
+            ele = 0.0
 
+    t = _find_text(el, "time")
+    name = _find_text(el, "name") or ("" if not is_wpt else "wpt")
+    desc = _find_text(el, "desc")
+    sym = _find_text(el, "sym")
+    return NamedPoint(name=name, lat=lat, lon=lon, ele=ele, time_iso=t, desc=desc, sym=sym)
 
 def parse_gpx_full(path: Path) -> Tuple[str, List[NamedPoint], List[Track]]:
     tree = parse_xml_tolerant(path)
@@ -521,6 +536,59 @@ def main():
         append=bool(args.append),
     )
     print(res.message)
+
+# --- Backward-compatible API for Android bridge.py (Chaquopy) ---
+
+# ----------------- Backward-compatible API for Android bridge.py -----------------
+
+def append_gpx_into_ms(
+        existing_ms_path,
+        gpx_path,
+        out_ms_path=None,
+        line_mode: str = "none",
+        style_text=None,
+        keep_existing_title: bool = True,
+):
+    """
+    Backward-compatible function used by Android bridge.py (Chaquopy).
+
+    Returns: (added_waypoints_count, added_tracks_count)
+    """
+    out_path = Path(out_ms_path) if out_ms_path is not None else Path(existing_ms_path)
+    gpx_path = Path(gpx_path)
+
+    # Count BEFORE
+    before_wpts = before_tracks = 0
+    if out_path.exists():
+        try:
+            _t, w_old, tr_old, _st = parse_ms_full(out_path)
+            before_wpts = len(w_old)
+            before_tracks = len(tr_old)
+        except Exception:
+            # broken MS -> treat as empty
+            before_wpts = 0
+            before_tracks = 0
+
+    # style_text semantics from bridge.py:
+    # - None => keep existing style if present
+    # - str  => override style (or use if no style in file)
+    style_arg = DEFAULT_STYLE if style_text is None else style_text
+
+    # Do append via the new API
+    convert_file(
+        gpx_path,
+        out_path,
+        to="ms",
+        line_mode=line_mode,
+        style=style_arg,
+        append=True,
+    )
+
+    # Count AFTER
+    _t2, w_new, tr_new, _st2 = parse_ms_full(out_path)
+    added_wpts = max(0, len(w_new) - before_wpts)
+    added_tracks = max(0, len(tr_new) - before_tracks)
+    return added_wpts, added_tracks
 
 
 if __name__ == "__main__":
