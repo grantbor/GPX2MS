@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 
 import os
-import re
-import shlex
+import shutil
+import subprocess
 import sys
 import time
+import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QProcess, Slot
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -24,8 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QGroupBox,
 )
-import subprocess
-import shutil
+
 
 def ts() -> str:
     return time.strftime("%H:%M:%S")
@@ -36,8 +36,12 @@ def is_windows() -> bool:
 
 
 def open_path_in_os(path: str) -> None:
+    """
+    Open a file/folder in the OS file manager.
+    Linux: avoid portal-related issues by trying multiple openers.
+    """
     try:
-        if sys.platform.startswith("win"):
+        if is_windows():
             os.startfile(path)  # type: ignore[attr-defined]
             return
 
@@ -45,7 +49,6 @@ def open_path_in_os(path: str) -> None:
             subprocess.run(["open", path], check=False)
             return
 
-        # Linux: try multiple openers, prefer KDE ones if present (avoid portal issues)
         candidates = []
         if shutil.which("kioclient5"):
             candidates.append(["kioclient5", "exec", path])
@@ -58,7 +61,6 @@ def open_path_in_os(path: str) -> None:
 
         for cmd in candidates:
             try:
-                # suppress noisy stderr from portal layers
                 r = subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 if r.returncode == 0:
                     return
@@ -66,6 +68,7 @@ def open_path_in_os(path: str) -> None:
                 pass
     except Exception:
         pass
+
 
 def guess_output_ext(input_path: str) -> str:
     p = input_path.lower()
@@ -96,48 +99,43 @@ class RunRequest:
     append: bool = False
 
 
-def parse_stats(text: str) -> tuple[int | None, int | None]:
+class WorkerSignals(QObject):
+    log = Signal(str)
+    done = Signal(str, int, int)  # message, added, skipped
+    error = Signal(str)
+
+
+class ConvertWorker(QRunnable):
     """
-    Parse converter output to extract:
-      - added_count
-      - skipped_duplicates
-    Returns (added, skipped) where each can be None if not found.
-
-    Supported formats (examples):
-      "Append: +12, duplicates skipped: 12"
-      "added objects: 12"
-      "duplicates skipped: 12"
-      "added=12 skipped=12"
+    Runs converter3.convert_file(...) in a background thread.
     """
-    if not text:
-        return None, None
 
-    added: int | None = None
-    skipped: int | None = None
+    def __init__(self, req: RunRequest):
+        super().__init__()
+        self.req = req
+        self.signals = WorkerSignals()
 
-    # Primary expected format
-    m = re.search(r"Append:\s*\+(\d+)\s*,\s*duplicates\s+skipped:\s*(\d+)", text, re.IGNORECASE)
-    if m:
-        return int(m.group(1)), int(m.group(2))
+    @Slot()
+    def run(self) -> None:
+        try:
+            self.signals.log.emit(f"[{ts()}] START append={self.req.append}")
 
-    # More flexible patterns
-    m = re.search(r"\badded(?:\s+objects)?\s*[:=]\s*\+?(\d+)\b", text, re.IGNORECASE)
-    if m:
-        added = int(m.group(1))
+            # Import inside worker: PyInstaller needs --hidden-import converter3 (see build notes)
+            import converter3  # type: ignore
 
-    m = re.search(r"\bduplicates\s+skipped\s*[:=]\s*(\d+)\b", text, re.IGNORECASE)
-    if m:
-        skipped = int(m.group(1))
+            res = converter3.convert_file(  # type: ignore[attr-defined]
+                self.req.input_path,
+                self.req.output_path,
+                append=bool(self.req.append),
+            )
 
-    # Compact "added=.. skipped=.." (or similar)
-    m = re.search(r"\badded\s*=\s*\+?(\d+)\b", text, re.IGNORECASE)
-    if m:
-        added = int(m.group(1))
-    m = re.search(r"\bskipped(?:_duplicates)?\s*=\s*(\d+)\b", text, re.IGNORECASE)
-    if m:
-        skipped = int(m.group(1))
+            msg = getattr(res, "message", "Done.")
+            added = int(getattr(res, "added_count", 0) or 0)
+            skipped = int(getattr(res, "skipped_duplicates", 0) or 0)
 
-    return added, skipped
+            self.signals.done.emit(msg, added, skipped)
+        except Exception:
+            self.signals.error.emit(traceback.format_exc())
 
 
 class MainWindow(QWidget):
@@ -147,8 +145,6 @@ class MainWindow(QWidget):
 
         # Enable drag & drop on the whole window
         self.setAcceptDrops(True)
-
-        self.converter_path = str(Path(__file__).with_name("converter3.py"))
 
         self.input_edit = QLineEdit()
         self.output_edit = QLineEdit()
@@ -175,12 +171,12 @@ class MainWindow(QWidget):
         self.btn_open_output.setEnabled(False)
         self.btn_open_folder.setEnabled(False)
 
-        # QProcess state
-        self.proc: QProcess | None = None
+        # Thread pool
+        self.pool = QThreadPool.globalInstance()
+        self._busy = False
+
+        # Last output path (for open buttons)
         self._last_output_path: str | None = None
-        self._run_req: RunRequest | None = None
-        self._t0: float | None = None
-        self._stdout_accum: list[str] = []
 
         # Layout
         root = QVBoxLayout(self)
@@ -241,7 +237,6 @@ class MainWindow(QWidget):
 
         self.log(f"[{ts()}] GUI started")
         self.log(f"[{ts()}] sys.executable = {sys.executable}")
-        self.log(f"[{ts()}] converter_path = {self.converter_path} (exists={os.path.exists(self.converter_path)})")
         self.log(f"[{ts()}] cwd = {os.getcwd()}")
 
     # ---------- drag & drop ----------
@@ -249,7 +244,6 @@ class MainWindow(QWidget):
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         md = event.mimeData()
         if md.hasUrls():
-            # Accept if any URL looks like a supported file
             for u in md.urls():
                 p = u.toLocalFile()
                 if p and is_supported_input(p):
@@ -262,7 +256,6 @@ class MainWindow(QWidget):
         if not md.hasUrls():
             return
 
-        # Pick first supported file
         for u in md.urls():
             p = u.toLocalFile()
             if p and is_supported_input(p):
@@ -281,6 +274,8 @@ class MainWindow(QWidget):
         self.log_view.append(s)
 
     def set_busy(self, busy: bool):
+        self._busy = busy
+
         self.btn_pick_input.setEnabled(not busy)
         self.btn_pick_output.setEnabled(not busy)
         self.btn_clear_log.setEnabled(not busy)
@@ -288,9 +283,7 @@ class MainWindow(QWidget):
         self.btn_convert.setEnabled(not busy and self.can_convert())
         self.btn_append.setEnabled(not busy and self.can_append())
 
-        self.btn_open_output.setEnabled(
-            (not busy) and bool(self._last_output_path) and os.path.exists(self._last_output_path or "")
-        )
+        self.btn_open_output.setEnabled((not busy) and bool(self._last_output_path) and os.path.exists(self._last_output_path or ""))
         self.btn_open_folder.setEnabled((not busy) and bool(self._last_output_path))
 
     def can_convert(self) -> bool:
@@ -310,14 +303,19 @@ class MainWindow(QWidget):
 
     @Slot()
     def on_paths_changed(self):
-        running = self.proc is not None
-        self.btn_convert.setEnabled(self.can_convert() and not running)
-        self.btn_append.setEnabled(self.can_append() and not running)
+        if self._busy:
+            return
+        self.btn_convert.setEnabled(self.can_convert())
+        self.btn_append.setEnabled(self.can_append())
 
     @Slot()
     def pick_input(self):
         path, _ = QFileDialog.getOpenFileName(
-            self, "Pick input file", "", "GPS files (*.gpx *.ms);;All files (*.*)"
+            self,
+            "Pick input file",
+            str(Path.home()),
+            "GPS files (*.gpx *.ms);;All files (*.*)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not path:
             return
@@ -325,116 +323,54 @@ class MainWindow(QWidget):
 
     @Slot()
     def pick_output(self):
-        suggested = self.output_edit.text().strip() or ""
-        start_dir = str(Path(suggested).parent) if suggested else ""
-        path, _ = QFileDialog.getSaveFileName(self, "Pick output file", start_dir, "All files (*.*)")
+        suggested = self.output_edit.text().strip() or str(Path.home())
+        start_dir = str(Path(suggested).parent) if suggested else str(Path.home())
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Pick output file",
+            start_dir,
+            "All files (*.*)",
+            options=QFileDialog.Option.DontUseNativeDialog,
+        )
         if not path:
             return
         self.output_edit.setText(path)
 
-    # ---------- process runner (QProcess) ----------
+    # ---------- runner ----------
 
-    def start_process(self, req: RunRequest):
-        if self.proc is not None:
+    def start_worker(self, req: RunRequest):
+        if self._busy:
             return
 
-        if not os.path.exists(self.converter_path):
-            QMessageBox.warning(self, "Error", f"converter3.py not found:\n{self.converter_path}")
-            return
         if not os.path.exists(req.input_path):
             QMessageBox.warning(self, "Error", f"Input not found:\n{req.input_path}")
             return
-        if not is_supported_input(req.input_path):
-            QMessageBox.warning(self, "Error", "Unsupported input. Please select .gpx or .ms")
-            return
 
-        self._run_req = req
-        self._last_output_path = req.output_path
-        self._t0 = time.time()
-        self._stdout_accum = []
-
-        # Reset summary before run
         self.set_summary(None, None)
+        self._last_output_path = req.output_path
 
-        self.log("----")
-        self.log(f"[{ts()}] Run requested append={req.append}")
-
-        args = ["-u", self.converter_path, req.input_path, req.output_path]
-        if req.append:
-            args.append("--append")
-
-        p = QProcess(self)
-        self.proc = p
-
-        p.setProgram(sys.executable)
-        p.setArguments(args)
-        p.setWorkingDirectory(os.getcwd())
-        p.setProcessChannelMode(QProcess.MergedChannels)
-
-        p.readyReadStandardOutput.connect(self.on_ready_read)
-        p.finished.connect(self.on_finished)
-        p.errorOccurred.connect(self.on_error)
+        worker = ConvertWorker(req)
+        worker.signals.log.connect(self.log)
+        worker.signals.done.connect(self.on_worker_done)
+        worker.signals.error.connect(self.on_worker_error)
 
         self.set_busy(True)
-        p.start()
+        self.pool.start(worker)
 
-        if not p.waitForStarted(3000):
-            self.log(f"[{ts()}] ERROR: process did not start")
-            self.set_busy(False)
-            self.proc = None
-            QMessageBox.warning(self, "Error", "Process did not start")
-            return
-
-        self.log(f"[{ts()}] pid = {p.processId()}")
-
-    @Slot()
-    def on_ready_read(self):
-        if self.proc is None:
-            return
-        data = bytes(self.proc.readAllStandardOutput())
-        if not data:
-            return
-        text = data.decode("utf-8", errors="replace")
-        self._stdout_accum.append(text)
-
-        # Print chunk line-by-line
-        for line in text.splitlines():
-            self.log(line)
-
-    @Slot(int, QProcess.ExitStatus)
-    def on_finished(self, exit_code: int, exit_status: QProcess.ExitStatus):
-        elapsed = (time.time() - self._t0) if self._t0 else 0.0
-        self.log(f"[{ts()}] FINISH exit_code={exit_code} status={exit_status.name} elapsed={elapsed:.3f}s")
-
-        full_out = "".join(self._stdout_accum)
-        added, skipped = parse_stats(full_out)
+    @Slot(str, int, int)
+    def on_worker_done(self, message: str, added: int, skipped: int):
+        self.log(f"[{ts()}] {message}")
+        self.log(f"[{ts()}] FINISH")
         self.set_summary(added, skipped)
-
         self.set_busy(False)
-
-        if exit_code != 0:
-            QMessageBox.warning(self, "Converter error", f"Exit code {exit_code}\n\nSee log for details.")
-
-        # release process
-        if self.proc is not None:
-            self.proc.deleteLater()
-        self.proc = None
-        self._run_req = None
-        self._t0 = None
-        self._stdout_accum = []
-
-        # re-evaluate buttons
         self.on_paths_changed()
 
-    @Slot(QProcess.ProcessError)
-    def on_error(self, err: QProcess.ProcessError):
-        self.log(f"[{ts()}] QProcess error: {err.name}")
+    @Slot(str)
+    def on_worker_error(self, tb: str):
+        self.log(tb)
         self.set_busy(False)
-        if self.proc is not None:
-            self.proc.deleteLater()
-        self.proc = None
-        QMessageBox.warning(self, "Process error", f"{err.name}\n\nSee log for details.")
         self.on_paths_changed()
+        QMessageBox.warning(self, "Converter error", "Conversion failed.\n\nSee log for details.")
 
     # ---------- actions ----------
 
@@ -444,7 +380,7 @@ class MainWindow(QWidget):
         out = self.output_edit.text().strip()
         if not inp or not out:
             return
-        self.start_process(RunRequest(inp, out, append=False))
+        self.start_worker(RunRequest(inp, out, append=False))
 
     @Slot()
     def on_append(self):
@@ -456,14 +392,15 @@ class MainWindow(QWidget):
         target, _ = QFileDialog.getOpenFileName(
             self,
             "Pick target .ms to append into",
-            "",
-            "MS files (*.ms);;All files (*.*)"
+            str(Path.home()),
+            "MS files (*.ms);;All files (*.*)",
+            options=QFileDialog.Option.DontUseNativeDialog,
         )
         if not target:
             return
 
         self.output_edit.setText(target)
-        self.start_process(RunRequest(inp, target, append=True))
+        self.start_worker(RunRequest(inp, target, append=True))
 
     @Slot()
     def on_open_output(self):
