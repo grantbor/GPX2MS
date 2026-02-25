@@ -24,19 +24,23 @@ def parse_xml_tolerant(path: Path) -> ET.ElementTree:
     except ET.ParseError as e:
         if "unbound prefix" not in str(e):
             raise
-        # Префиксы в тегах: <x:y>
+
+        # Префиксы в тегах: <x:tag ...> </x:tag>
         tag_prefixes = set(re.findall(r"<\/?\s*([A-Za-z_][\w.-]*):", data))
+
         # Префиксы в атрибутах: xsi:schemaLocation="..." (но НЕ xmlns:ql="...")
         attr_prefixes = set(
             p
             for p in re.findall(r"\s([A-Za-z_][\w.-]*):[A-Za-z_][\w.-]*\s*=", data)
             if p not in _RESERVED_PREFIXES
         )
+
         prefixes = sorted((tag_prefixes | attr_prefixes) - _RESERVED_PREFIXES)
 
         # Уже объявленные xmlns:*
         declared = set(re.findall(r"\sxmlns:([A-Za-z_][\w.-]*)=", data))
         declared |= _RESERVED_PREFIXES
+
         missing = [p for p in prefixes if p not in declared]
         if not missing:
             raise
@@ -56,14 +60,49 @@ ET.register_namespace("", GPX_NS)
 CIRCLE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3" fill="#888"/></svg>'
 CIRCLE_SVG_B64 = base64.b64encode(CIRCLE_SVG.encode("utf-8")).decode("ascii")
 
-DEFAULT_STYLE = (
-    'node { text: eval(tag("name")); details-text: eval(tag("name")); '
-    'details-description: eval(tag("name")); text-color:black; font-stroke-width:5px; '
-    'font-stroke-color:yellow; '
-    f'icon-image: eval(data("{CIRCLE_SVG_B64}")); '
-    'icon-scale:1; icon-tint:#00FFFF;} '
-    'line { color:#00FFFF; width:3px; }'
-)
+_HEX_COLOR_RE = re.compile(r"^#([0-9a-fA-F]{6}|[0-9a-fA-F]{8})$")
+
+
+def make_style(color: str = "#00FFFF") -> str:
+    c = (color or "").strip() or "#00FFFF"
+    # One MapCSS style per MS file (applies to all objects in the file).
+    return f"""node {{
+    text: eval(tag("name"));
+    details-text: eval(tag("name"));
+    details-description: eval(tag("name"));
+    text-color: black;
+    font-stroke-width: 5px;
+    font-stroke-color: yellow;
+    icon-image: eval(data("{CIRCLE_SVG_B64}"));
+    icon-scale: 1;
+    icon-tint: {c};
+}}
+line {{
+    color: {c};
+    width: 3px;
+}}""".strip()
+
+
+def style_from_arg(style: str | None) -> str | None:
+    """Normalize style argument.
+
+    Accepted inputs:
+      - None => None
+      - ""   => "" (special meaning: keep existing style on append)
+      - "#RRGGBB" or "#AARRGGBB" => expanded to full MapCSS via make_style()
+      - otherwise => returned as-is (assumed to already be MapCSS)
+    """
+    if style is None:
+        return None
+    s = str(style).strip()
+    if s == "":
+        return ""
+    if _HEX_COLOR_RE.fullmatch(s):
+        return make_style(s)
+    return s
+
+
+DEFAULT_STYLE = make_style("#00FFFF")
 
 # Grid-ish names: A1, a-01, AA 12, ah_23, etc.
 GRID_RE = re.compile(r"^\s*([A-Za-z]+)\s*[-_ ]*\s*(\d+)\s*$")
@@ -88,8 +127,6 @@ class Track:
 
 
 # ----------------- small helpers -----------------
-
-
 def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -107,19 +144,30 @@ def detect_format(path: Path) -> str:
         return "gpx"
     if low.endswith(".ms"):
         return "ms"
+
     # fallback: sniff
     head = path.read_text(encoding="utf-8", errors="ignore")[:2000].lower()
     if "<gpx" in head:
         return "gpx"
-    if "<custommapsource" in head:
+    if "<custommapsource" in head or "<geojson" in head:
         return "ms"
-    raise ValueError("Unknown format (expected .gpx or .ms)")
+    raise ValueError(f"Unknown format: {path}")
 
 
-# ----------------- GPX parsing/building -----------------
+def _find_text(parent: ET.Element, local_name: str) -> Optional[str]:
+    for child in parent:
+        tag = child.tag
+        if "}" in tag:
+            tag = tag.split("}", 1)[1]
+        if tag == local_name:
+            return _text(child)
+    return None
+
+
 def _parse_point_element(el: ET.Element, is_wpt: bool) -> NamedPoint:
     lat = float(el.attrib["lat"])
     lon = float(el.attrib["lon"])
+
     ele = 0.0
     ele_text = _find_text(el, "ele")
     if ele_text:
@@ -133,6 +181,7 @@ def _parse_point_element(el: ET.Element, is_wpt: bool) -> NamedPoint:
     desc = _find_text(el, "desc")
     sym = _find_text(el, "sym")
     return NamedPoint(name=name, lat=lat, lon=lon, ele=ele, time_iso=t, desc=desc, sym=sym)
+
 
 def parse_gpx_full(path: Path) -> Tuple[str, List[NamedPoint], List[Track]]:
     tree = parse_xml_tolerant(path)
@@ -206,8 +255,6 @@ def build_gpx_full(title: str, wpts: List[NamedPoint], tracks: List[Track]) -> E
 
 
 # ----------------- MS parsing/building -----------------
-
-
 def parse_ms_full(path: Path) -> Tuple[str, List[NamedPoint], List[Track], Optional[str]]:
     tree = ET.parse(path)
     root = tree.getroot()
@@ -251,7 +298,6 @@ def parse_ms_full(path: Path) -> Tuple[str, List[NamedPoint], List[Track], Optio
             coords = geom.get("coordinates") or []
             times = props.get("times") or None
             name = str(props.get("name") or "track")
-
             segments: List[List[NamedPoint]] = []
             for si, seg in enumerate(coords):
                 pts: List[NamedPoint] = []
@@ -286,11 +332,11 @@ def _make_lines_snake(wpts: List[NamedPoint]) -> List[List[List[float]]]:
 
 
 def build_ms_full(
-    title: str,
-    wpts: List[NamedPoint],
-    tracks: List[Track],
-    line_mode: str = "none",  # grid helper for WAYPOINTS only: none|orth|snake|both
-    style_text: str = DEFAULT_STYLE,
+        title: str,
+        wpts: List[NamedPoint],
+        tracks: List[Track],
+        line_mode: str = "none",  # grid helper for WAYPOINTS only: none|orth|snake|both
+        style_text: str = DEFAULT_STYLE,
 ) -> ET.ElementTree:
     root = ET.Element("customMapSource", {"overlay": "true"})
     ET.SubElement(root, "name").text = title
@@ -319,7 +365,6 @@ def build_ms_full(
         coords: List[List[List[float]]] = []
         times_out: List[List[Optional[str]]] = []
         any_time = False
-
         for seg in tr.segments:
             seg_coords: List[List[float]] = []
             seg_times: List[Optional[str]] = []
@@ -336,7 +381,9 @@ def build_ms_full(
         if any_time:
             props["times"] = times_out
 
-        features.append({"type": "Feature", "properties": props, "geometry": {"type": "MultiLineString", "coordinates": coords}})
+        features.append(
+            {"type": "Feature", "properties": props, "geometry": {"type": "MultiLineString", "coordinates": coords}}
+        )
 
     # Waypoints -> Points
     for p in wpts:
@@ -348,11 +395,7 @@ def build_ms_full(
         if p.sym:
             props["sym"] = p.sym
         features.append(
-            {
-                "type": "Feature",
-                "properties": props,
-                "geometry": {"type": "Point", "coordinates": [p.lon, p.lat, p.ele]},
-            }
+            {"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [p.lon, p.lat, p.ele]}}
         )
 
     gj = {"type": "FeatureCollection", "features": features}
@@ -367,8 +410,6 @@ def build_ms_full(
 
 
 # ----------------- Public API (import-friendly) -----------------
-
-
 @dataclass
 class ConvertResult:
     message: str
@@ -403,10 +444,10 @@ def _track_key(t: Track) -> tuple:
 
 
 def _dedup_merge(
-    existing_wpts: List[NamedPoint],
-    existing_tracks: List[Track],
-    new_wpts: List[NamedPoint],
-    new_tracks: List[Track],
+        existing_wpts: List[NamedPoint],
+        existing_tracks: List[Track],
+        new_wpts: List[NamedPoint],
+        new_tracks: List[Track],
 ) -> tuple[list[NamedPoint], list[Track], int, int]:
     wpt_seen = set(_wpt_key(p) for p in existing_wpts)
     trk_seen = set(_track_key(t) for t in existing_tracks)
@@ -439,23 +480,23 @@ def _dedup_merge(
 
 
 def convert_file(
-    input_path: str | Path,
-    output_path: str | Path,
-    *,
-    to: Optional[str] = None,
-    line_mode: str = "none",
-    style: str = DEFAULT_STYLE,
-    append: bool = False,
+        input_path: str | Path,
+        output_path: str | Path,
+        *,
+        to: Optional[str] = None,
+        line_mode: str = "none",
+        style: str = DEFAULT_STYLE,
+        append: bool = False,
 ) -> ConvertResult:
-    """
-    Import-friendly conversion entry point.
-    Keeps CLI behavior intact, but can be used from Android/GUI without spawning a subprocess.
+    """Import-friendly conversion entry point.
 
+    Keeps CLI behavior intact, but can be used from Android/GUI without spawning a subprocess.
     - input_path/output_path: filesystem paths
     - to: 'gpx' or 'ms' (None = opposite of input)
     - append:
         * Only supported for GPX -> MS.
         * If True and output exists and is MS, merges (dedup) existing objects with new objects.
+
     Returns ConvertResult(message, added_count, skipped_duplicates).
     """
     inp = Path(input_path)
@@ -464,68 +505,64 @@ def convert_file(
     src = detect_format(inp)
     dst = to if to else ("ms" if src == "gpx" else "gpx")
 
-    # GPX -> MS
+    style_norm = style_from_arg(style)
+
     if src == "gpx" and dst == "ms":
         title_new, wpts_new, tracks_new = parse_gpx_full(inp)
 
-        # Append mode: merge into existing MS (if it exists)
-        if append and out.exists():
-            try:
-                title_old, wpts_old, tracks_old, style_old = parse_ms_full(out)
-                merged_wpts, merged_tracks, added, skipped = _dedup_merge(wpts_old, tracks_old, wpts_new, tracks_new)
-                tree = build_ms_full(
-                    title_old or title_new,
-                    merged_wpts,
-                    merged_tracks,
-                    line_mode="none",  # don't regenerate grids on append
-                    style_text=style_old if (style_old is not None) else style,
-                )
-                tree.write(out, encoding="utf-8", xml_declaration=True)
-                return ConvertResult(
-                    message=f"Append: +{added}, duplicates skipped: {skipped}",
-                    added_count=added,
-                    skipped_duplicates=skipped,
-                )
-            except Exception:
-                # If existing MS is broken/unreadable: fall back to overwrite mode.
-                pass
+        if append:
+            # Append into existing MS if present, else behave like convert
+            if out.exists():
+                try:
+                    title_old, wpts_old, tracks_old, style_old = parse_ms_full(out)
+                except Exception:
+                    title_old, wpts_old, tracks_old, style_old = out.stem, [], [], None
+            else:
+                title_old, wpts_old, tracks_old, style_old = out.stem, [], [], None
 
-        tree = build_ms_full(title_new, wpts_new, tracks_new, line_mode=line_mode, style_text=style)
+            # Dedup merge
+            merged_wpts, merged_tracks, added, skipped = _dedup_merge(wpts_old, tracks_old, wpts_new, tracks_new)
+
+            # Title handling: keep existing title if present
+            title_final = title_old if title_old else title_new
+
+            # Style handling:
+            # - style_norm None or "" => keep existing style (style_old)
+            # - otherwise => override with style_norm (already normalized/expanded)
+            chosen = style_old if (style_norm is None or style_norm == "") else style_norm
+            style_final = chosen if (chosen not in (None, "")) else DEFAULT_STYLE
+
+            tree = build_ms_full(title_final, merged_wpts, merged_tracks, line_mode=line_mode, style_text=style_final)
+            tree.write(out, encoding="utf-8", xml_declaration=True)
+
+            msg = f"Append: +{added}, duplicates skipped: {skipped}"
+            return ConvertResult(message=msg, added_count=added, skipped_duplicates=skipped)
+
+        # Normal convert (overwrite)
+        style_final = (style_norm if (style_norm is not None and style_norm != "") else DEFAULT_STYLE)
+        tree = build_ms_full(title_new, wpts_new, tracks_new, line_mode=line_mode, style_text=style_final)
         tree.write(out, encoding="utf-8", xml_declaration=True)
         return ConvertResult(message="Done.", added_count=(len(wpts_new) + len(tracks_new)), skipped_duplicates=0)
 
-    # MS -> GPX
     if src == "ms" and dst == "gpx":
         title, wpts, tracks, _style = parse_ms_full(inp)
         tree = build_gpx_full(title, wpts, tracks)
         tree.write(out, encoding="utf-8", xml_declaration=True)
         return ConvertResult(message="Done.", added_count=(len(wpts) + len(tracks)), skipped_duplicates=0)
 
-    raise SystemExit("Unsupported conversion path.")
+    raise ValueError(f"Unsupported conversion: {src} -> {dst}")
 
 
 # ----------------- CLI -----------------
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Convert between GPX (wpt+trk) and customMapSource+GeoJSON.")
-    parser.add_argument("input")
-    parser.add_argument("output")
-    parser.add_argument("--to", choices=["gpx", "ms"], default=None, help="Target format (default: opposite of input).")
-
-    # grid helper (for waypoint grids; not related to normal tracks)
-    parser.add_argument(
-        "--line-mode",
-        choices=["none", "orth", "snake", "both"],
-        default="none",
-        help="When converting GPX->MS: optional grid lines derived from waypoint names.",
-    )
-
-    parser.add_argument("--style", default=DEFAULT_STYLE, help='Style text for <style>. Use --style "" to omit.')
-
-    parser.add_argument("--append", action="store_true", help="GPX->MS only: merge into existing MS output and skip duplicates.")
-
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="GPX <-> MS converter")
+    ap.add_argument("input", help="Input file (.gpx or .ms)")
+    ap.add_argument("output", help="Output file (.ms or .gpx)")
+    ap.add_argument("--to", choices=["gpx", "ms"], default=None, help="Force output format")
+    ap.add_argument("--append", action="store_true", help="Append GPX into existing MS (dedup enabled)")
+    ap.add_argument("--line-mode", default="none", help="Grid helper for waypoints: none|orth|snake|both")
+    ap.add_argument("--style", default=DEFAULT_STYLE, help="MapCSS style OR hex color (#RRGGBB/#AARRGGBB)")
+    args = ap.parse_args()
 
     res = convert_file(
         args.input,
@@ -533,13 +570,12 @@ def main():
         to=args.to,
         line_mode=args.line_mode,
         style=args.style,
-        append=bool(args.append),
+        append=args.append,
     )
+
+    # CLI output (keep simple)
     print(res.message)
 
-# --- Backward-compatible API for Android bridge.py (Chaquopy) ---
-
-# ----------------- Backward-compatible API for Android bridge.py -----------------
 
 def append_gpx_into_ms(
         existing_ms_path,
@@ -571,8 +607,10 @@ def append_gpx_into_ms(
 
     # style_text semantics from bridge.py:
     # - None => keep existing style if present
-    # - str  => override style (or use if no style in file)
-    style_arg = DEFAULT_STYLE if style_text is None else style_text
+    # - ""   => keep existing style
+    # - "#RRGGBB"/"#AARRGGBB" => apply that color (expanded in converter)
+    # - full MapCSS string => override style
+    style_arg = "" if style_text is None else style_text
 
     # Do append via the new API
     convert_file(

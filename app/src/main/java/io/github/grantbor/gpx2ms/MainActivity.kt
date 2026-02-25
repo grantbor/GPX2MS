@@ -1,17 +1,20 @@
 package io.github.grantbor.gpx2ms
 
-import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
+import android.content.ActivityNotFoundException
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.chaquo.python.Python
 import com.chaquo.python.android.AndroidPlatform
+import com.google.android.material.card.MaterialCardView
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -43,8 +46,17 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnShare: Button
     private lateinit var btnOpenGuru: Button
 
+    // Color picker overlay (circle)
+    private lateinit var btnPickColor: MaterialCardView
+    private lateinit var colorSwatch: View
+
     private lateinit var txtPicked: TextView
     private lateinit var txtResult: TextView
+
+    // ---- Color state ----
+    private val PREFS_NAME = "gpx2ms_prefs"
+    private val PREF_COLOR_HEX = "ms_color_hex"
+    private var msColorHex: String = "#00FFFF" // default cyan
 
     // --- Pick input GPX/MS ---
     private val pickFile =
@@ -144,12 +156,20 @@ class MainActivity : AppCompatActivity() {
             Python.start(AndroidPlatform(this))
         }
 
+        // Load saved color
+        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+        msColorHex = prefs.getString(PREF_COLOR_HEX, "#00FFFF") ?: "#00FFFF"
+
         val btnPick = findViewById<Button>(R.id.btnPick)
         btnConvert = findViewById(R.id.btnConvert)
         btnAppend = findViewById(R.id.btnAppend)
         btnSave = findViewById(R.id.btnSave)
         btnShare = findViewById(R.id.btnShare)
         btnOpenGuru = findViewById(R.id.btnOpenGuru)
+
+        btnPickColor = findViewById(R.id.btnPickColor)
+        colorSwatch = findViewById(R.id.viewColorSwatch)
+        applyColorToSwatch(msColorHex)
 
         txtPicked = findViewById(R.id.txtPicked)
         txtResult = findViewById(R.id.txtResult)
@@ -159,9 +179,6 @@ class MainActivity : AppCompatActivity() {
 
         resetResultUi()
         updateButtons()
-
-        // Optional housekeeping: delete old run dirs (keeps cache small)
-        cleanupOldRunDirs(maxAgeHours = 24)
 
         btnPick.setOnClickListener {
             val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -173,7 +190,13 @@ class MainActivity : AppCompatActivity() {
             pickFile.launch(intent)
         }
 
-        // Convert: generate result into per-run cache dir and memory bytes
+        // Color picker (simple presets)
+        btnPickColor.setOnClickListener {
+            showColorPresetDialog()
+        }
+
+        // Convert: generate result into internal output file and memory bytes
+        // (does NOT export to filesystem by itself)
         btnConvert.setOnClickListener {
             val uri = pickedUri
             if (uri == null) {
@@ -196,11 +219,16 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
 
-                val runDir = createRunDir()
+                // Copy input to internal cache for Python
                 val originalStem = inName.substringBeforeLast('.', inName)
-                val safeStem = sanitizeStem(originalStem)
+                val safeStem = originalStem
+                    .replace('\u0000', '_')
+                    .replace('/', '_')
+                    .replace('\\', '_')
+                    .trim()
+                    .ifEmpty { "input" }
 
-                val inFile = File(runDir, "$safeStem.$inExt")
+                val inFile = File(cacheDir, "$safeStem.$inExt")
                 contentResolver.openInputStream(uri)!!.use { input ->
                     inFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -208,19 +236,24 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 val outExt = if (inExt == "gpx") "ms" else "gpx"
-                val outFile = File(runDir, "output.$outExt")
+                val outFile = File(cacheDir, "output.$outExt")
 
                 txtResult.text = "CONVERT\n2/2 Running…"
 
                 val py = Python.getInstance()
                 val bridge = py.getModule("bridge")
+
+                // ✅ One color for points+track:
+                // We pass HEX as "style". converter3.py will expand it to full style.
+                val styleOrEmpty = if (outExt == "ms") msColorHex else ""
+
                 val pyResult = bridge.callAttr(
                     "convert",
                     inFile.absolutePath,
                     outFile.absolutePath,
                     null,   // auto
                     "none", // line_mode
-                    "",     // style
+                    styleOrEmpty,
                     false   // append
                 ).toString()
 
@@ -237,7 +270,6 @@ class MainActivity : AppCompatActivity() {
 
                 txtResult.text =
                     "$pyResult\n\nГотово.\nТеперь можно: Append (в существующий .ms) / Save (создать файл) / Share / Open in Guru."
-
             } catch (e: Exception) {
                 txtResult.text = "CONVERT FAILED ❌\n${e.message}\n\n$e"
             }
@@ -301,7 +333,9 @@ class MainActivity : AppCompatActivity() {
                 try {
                     grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     pendingRevokePkgs.add(pkg)
-                } catch (_: Exception) { /* ok */ }
+                } catch (_: Exception) {
+                    /* ok */
+                }
             }
             pendingRevokeUri = uri
 
@@ -342,7 +376,9 @@ class MainActivity : AppCompatActivity() {
                 grantUriPermission(targetPkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 pendingRevokeUri = uri
                 pendingRevokePkgs.add(targetPkg)
-            } catch (_: Exception) { /* ok */ }
+            } catch (_: Exception) {
+                /* ok */
+            }
 
             viewIntent.clipData = ClipData.newUri(contentResolver, lastExportName, uri)
             viewIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -350,6 +386,7 @@ class MainActivity : AppCompatActivity() {
             try {
                 startActivity(viewIntent)
             } catch (_: Exception) {
+                // Fallback: open with any capable viewer (also strengthened)
                 val fallback = Intent(Intent.ACTION_VIEW).apply {
                     setDataAndType(uri, mime)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -363,12 +400,15 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
+        // Revoke temporary URI grants after returning to our app
         val uri = pendingRevokeUri ?: return
         if (pendingRevokePkgs.isEmpty()) return
 
         try {
             revokeUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: Exception) { /* ok */ }
+        } catch (_: Exception) {
+            /* ok */
+        }
 
         pendingRevokeUri = null
         pendingRevokePkgs.clear()
@@ -393,20 +433,20 @@ class MainActivity : AppCompatActivity() {
 
             val beforeSize = try {
                 contentResolver.openFileDescriptor(targetUri, "r")?.statSize ?: -1L
-            } catch (_: Exception) { -1L }
+            } catch (_: Exception) {
+                -1L
+            }
 
-            val runDir = createRunDir()
-
-            // Copy GPX to per-run cache dir
-            val inFile = File(runDir, "input.gpx")
+            // Copy GPX to internal cache
+            val inFile = File(cacheDir, "input.gpx")
             contentResolver.openInputStream(gpxUri)!!.use { input ->
                 inFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
 
-            // Copy target MS to per-run cache dir output.ms (Python will append into it)
-            val outFile = File(runDir, "output.ms")
+            // Copy target MS to internal output.ms (Python will append into it)
+            val outFile = File(cacheDir, "output.ms")
             contentResolver.openInputStream(targetUri)!!.use { input ->
                 outFile.outputStream().use { output ->
                     input.copyTo(output)
@@ -417,14 +457,18 @@ class MainActivity : AppCompatActivity() {
 
             val py = Python.getInstance()
             val bridge = py.getModule("bridge")
+
+            // ✅ IMPORTANT:
+            // Append should NOT change style of existing MS by default.
+            // We pass empty style override, so converter keeps existing style.
             val pyResult = bridge.callAttr(
                 "convert",
                 inFile.absolutePath,
                 outFile.absolutePath,
-                null,
-                "none",
-                "",
-                true
+                null,   // auto
+                "none", // line_mode
+                "",     // style override: keep existing
+                true    // append
             ).toString()
 
             txtResult.text = "APPEND\n3/4 Writing target…"
@@ -436,8 +480,11 @@ class MainActivity : AppCompatActivity() {
 
             val afterSize = try {
                 contentResolver.openFileDescriptor(targetUri, "r")?.statSize ?: -1L
-            } catch (_: Exception) { -1L }
+            } catch (_: Exception) {
+                -1L
+            }
 
+            // Update in-memory result (so Save can still work immediately if needed)
             outputBytes = bytes
             hasResult = true
             suggestedOutName = targetName
@@ -451,10 +498,47 @@ class MainActivity : AppCompatActivity() {
 
             txtResult.text =
                 "$pyResult\n\nDONE Appended into:\n$targetName\nSize: $beforeSize → $afterSize bytes"
-
         } catch (e: Exception) {
             txtResult.text = "APPEND FAILED ❌\n${e.message}\n\n$e"
         }
+    }
+
+    // --- Color dialog/prefs ---
+    private fun showColorPresetDialog() {
+        val presets: List<Pair<String, String>> = listOf(
+            "Циан (#00FFFF)" to "#00FFFF",
+            "Зеленый (#00FF00)" to "#00FF00",
+            "Красный (#FF0000)" to "#FF0000",
+            "Желтенький (#FFFF00)" to "#FFFF00",
+            "Маджента (#FF00FF)" to "#FF00FF",
+            "Белый (#FFFFFF)" to "#FFFFFF",
+            "Рыжий (#FF8800)" to "#FF8800",
+        )
+        val labels = presets.map { it.first }.toTypedArray()
+
+        AlertDialog.Builder(this)
+            .setTitle("Objects color")
+            .setItems(labels) { _, which ->
+                val hex = presets[which].second
+                msColorHex = hex
+                getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+                    .edit()
+                    .putString(PREF_COLOR_HEX, msColorHex)
+                    .apply()
+                applyColorToSwatch(msColorHex)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyColorToSwatch(hex: String) {
+        // Parse #RRGGBB / #AARRGGBB
+        val c = try {
+            android.graphics.Color.parseColor(hex)
+        } catch (_: Exception) {
+            android.graphics.Color.parseColor("#00FFFF")
+        }
+        colorSwatch.setBackgroundColor(c)
     }
 
     // --- UI helpers ---
@@ -474,9 +558,13 @@ class MainActivity : AppCompatActivity() {
         val hasInput = pickedUri != null
         btnConvert.isEnabled = hasInput
 
+        // Convert/Append/Save depend on having a conversion result (bytes)
         btnSave.isEnabled = hasResult
+
+        // Append only makes sense for GPX input
         btnAppend.isEnabled = hasResult && inputKind == InputKind.GPX
 
+        // Share/Open depend on having an exported filesystem URI (Save or Append done)
         val exported = hasResult && lastExportUri != null
         btnShare.isEnabled = exported
         btnOpenGuru.isEnabled = exported
@@ -504,8 +592,9 @@ class MainActivity : AppCompatActivity() {
         try {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$appId")))
             return
-        } catch (_: ActivityNotFoundException) { /* fallback below */ }
-
+        } catch (_: ActivityNotFoundException) {
+            // fallback below
+        }
         startActivity(
             Intent(
                 Intent.ACTION_VIEW,
@@ -561,45 +650,9 @@ class MainActivity : AppCompatActivity() {
         val lower = name.lowercase()
         return when {
             lower.endsWith(".gpx") -> "application/gpx+xml"
+            // MS is a custom XML-ish format; many apps accept octet-stream
             lower.endsWith(".ms") -> "application/octet-stream"
             else -> "application/octet-stream"
-        }
-    }
-
-    private fun sanitizeStem(originalStem: String): String {
-        return originalStem
-            .replace('\u0000', '_')
-            .replace('/', '_')
-            .replace('\\', '_')
-            .trim()
-            .ifEmpty { "input" }
-    }
-
-    private fun createRunDir(): File {
-        val runs = File(cacheDir, "runs")
-        if (!runs.exists()) runs.mkdirs()
-
-        // timestamp + random to avoid collisions
-        val ts = System.currentTimeMillis()
-        val rnd = java.util.UUID.randomUUID().toString().take(8)
-        val dir = File(runs, "run_${ts}_$rnd")
-        dir.mkdirs()
-        return dir
-    }
-
-    private fun cleanupOldRunDirs(maxAgeHours: Int) {
-        val runs = File(cacheDir, "runs")
-        if (!runs.exists() || !runs.isDirectory) return
-
-        val now = System.currentTimeMillis()
-        val maxAgeMs = maxAgeHours.toLong() * 60L * 60L * 1000L
-
-        runs.listFiles()?.forEach { f ->
-            if (!f.isDirectory) return@forEach
-            val age = now - f.lastModified()
-            if (age > maxAgeMs) {
-                f.deleteRecursively()
-            }
         }
     }
 }

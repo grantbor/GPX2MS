@@ -19,84 +19,112 @@
             android:orientation="vertical"
             android:padding="20dp">
 
-
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnPick"
                 style="@style/Widget.Material3.Button"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:textSize="15sp"
-                android:text="@string/btn_pick"/>
+                android:text="@string/btn_pick"
+                android:textSize="15sp" />
 
             <TextView
                 android:id="@+id/txtPicked"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:paddingTop="10dp"
-                android:text="@string/file_not_selected"/>
+                android:text="@string/file_not_selected" />
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnConvert"
-                style="@style/Widget.Material3.Button"
+            <!-- Convert + Color picker overlay -->
+            <FrameLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:textSize="15sp"
-                android:text="@string/btn_convert"/>
+                android:layout_marginTop="14dp">
 
-            <com.google.android.material.button.MaterialButton
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnConvert"
+                    style="@style/Widget.Material3.Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/btn_convert"
+                    android:textSize="15sp"
+                    android:paddingEnd="72dp" />
+
+                <!-- круглый пикер поверх кнопки -->
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/btnPickColor"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:layout_marginEnd="2dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    app:cardCornerRadius="999dp"
+                    app:cardElevation="0dp"
+                    app:strokeColor="@android:color/black"
+                    app:strokeWidth="7dp">
+
+                    <View
+                        android:id="@+id/viewColorSwatch"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:layout_margin="7dp"
+                        android:background="#00FFFF" />
+                </com.google.android.material.card.MaterialCardView>
+
+            </FrameLayout>
+
+            <Button
                 android:id="@+id/btnSave"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/btn_save"
-                android:textSize="15sp"
                 android:layout_marginTop="16dp"
+                android:enabled="false"
+                android:text="@string/btn_save"
                 app:strokeColor="@color/outlined_button_stroke"
                 android:textColor="@color/outlined_button_text"
-                android:enabled="false" />
+                android:textSize="15sp" />
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnAppend"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:enabled="false"
                 android:text="@string/append_into_target"
-                android:textSize="15sp"
                 app:strokeColor="@color/outlined_button_stroke"
                 android:textColor="@color/outlined_button_text"
-                android:enabled="false" />
+                android:textSize="15sp" />
 
-
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnOpenGuru"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:enabled="true"
                 android:text="@string/openGuru"
-                android:textSize="15sp"
                 app:strokeColor="@color/outlined_button_guru"
                 android:textColor="@color/outlined_button_text"
-                android:enabled="true" />
+                android:textSize="15sp" />
 
-            <com.google.android.material.button.MaterialButton
+            <Button
                 android:id="@+id/btnShare"
                 style="@style/Widget.Material3.Button.OutlinedButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:enabled="true"
                 android:text="@string/btn_share"
-                android:textSize="15sp"
                 app:strokeColor="@color/outlined_button_share"
                 android:textColor="@color/outlined_button_text"
-                android:enabled="true" />
-
+                android:textSize="15sp" />
 
             <TextView
                 android:id="@+id/txtResult"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
-                android:text=""/>
+                android:text="" />
+
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </ScrollView>

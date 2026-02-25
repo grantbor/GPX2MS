@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 from pathlib import Path
 import traceback
 import converter3
+
 
 def convert(
         input_path: str,
@@ -16,9 +19,15 @@ def convert(
     :param input_path: путь к входному файлу
     :param output_path: путь к выходному файлу
     :param to: "gpx", "ms" или None (auto)
-    :param line_mode: none / orth / snake / both
-    :param style: текст стиля для MS
-                  - ""  -> по умолчанию (как было раньше при обычной конвертации)
+    :param line_mode: none / orth / snake / both (имеет смысл только для GPX->MS)
+    :param style:
+        Для GPX->MS:
+          - ""  -> DEFAULT_STYLE (обычная конвертация)
+          - "#RRGGBB"/"#AARRGGBB" -> применяется как цвет (converter3 развернёт в MapCSS)
+          - "node {...} line {...}" -> полный MapCSS
+        Для append (GPX->MS):
+          - ""  -> НЕ менять стиль существующего MS (оставить как есть)
+          - "#RRGGBB"/MapCSS -> перезаписать стиль в MS (перекрасит весь файл)
     :param append: если True и делаем GPX->MS, то дописываем результат в существующий MS (output_path)
     :return: строка статуса
     """
@@ -33,49 +42,25 @@ def convert(
         src_format = converter3.detect_format(inp)
 
         # Определяем целевой формат
-        if to:
-            dst_format = to.lower()
-        else:
-            dst_format = "ms" if src_format == "gpx" else "gpx"
+        dst_format = to.lower() if to else ("ms" if src_format == "gpx" else "gpx")
 
-        # --- GPX → MS ---
-        if src_format == "gpx" and dst_format == "ms":
-            # APPEND MODE: дописываем в существующий MS
-            if append and out.exists():
-                # style: если передали непустой style -> перезаписываем style в MS
-                # если style == "" -> не трогаем существующий style
-                style_override = None if style == "" else style
+        # Для append: если style == "" -> не менять стиль (это важно для UX).
+        # Для обычной конвертации: style == "" -> DEFAULT_STYLE (как было раньше).
+        style_arg = style
+        if src_format == "gpx" and dst_format == "ms" and not append:
+            if style_arg is None or str(style_arg).strip() == "":
+                style_arg = converter3.DEFAULT_STYLE
 
-                added, skipped = converter3.append_gpx_into_ms(
-                    existing_ms_path=out,
-                    gpx_path=inp,
-                    out_ms_path=out,
-                    line_mode=line_mode,
-                    style_text=style_override,
-                    keep_existing_title=True,
-                )
-                return f"Append: +{added}, duplicates skipped: {skipped}"
-
-            # NORMAL MODE: создаём новый MS
-            title, wpts, tracks = converter3.parse_gpx_full(inp)
-            tree = converter3.build_ms_full(
-                title=title,
-                wpts=wpts,
-                tracks=tracks,
-                line_mode=line_mode,
-                style_text=style if style else converter3.DEFAULT_STYLE,
-            )
-            tree.write(out, encoding="utf-8", xml_declaration=True)
-            return f"OK: GPX → MS | waypoints={len(wpts)} tracks={len(tracks)}"
-
-        # --- MS → GPX ---
-        if src_format == "ms" and dst_format == "gpx":
-            title, wpts, tracks, _style = converter3.parse_ms_full(inp)
-            tree = converter3.build_gpx_full(title=title, wpts=wpts, tracks=tracks)
-            tree.write(out, encoding="utf-8", xml_declaration=True)
-            return f"OK: MS → GPX | waypoints={len(wpts)} tracks={len(tracks)}"
-
-        raise RuntimeError(f"Unsupported conversion: {src_format} → {dst_format}")
+        # Запускаем конвертацию через единый API
+        res = converter3.convert_file(
+            inp,
+            out,
+            to=dst_format,          # можно None, но здесь явно
+            line_mode=line_mode,
+            style=style_arg,
+            append=bool(append),
+        )
+        return res.message
 
     except Exception as e:
         return "ERROR:\n" + str(e) + "\n\n" + traceback.format_exc()
