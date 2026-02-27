@@ -19,6 +19,5 @@
     <string name="no_file_selected">Сначала выберите файл</string>
     <string name="unsupported_file">Неподдерживаемый тип файла</string>
 
-    <!-- Добавленная строка -->
     <string name="result_placeholder">Результат появится здесь</string>
 </resources>

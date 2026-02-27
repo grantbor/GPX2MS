@@ -23,7 +23,7 @@ class MainActivity : AppCompatActivity() {
 
     private var pickedUri: Uri? = null
 
-    private var currentGpxFile: File? = null  // <-- добавить эту строку
+    private var currentGpxFile: File? = null
 
     // Результат конвертации
     private var outputBytes: ByteArray? = null
@@ -182,14 +182,14 @@ class MainActivity : AppCompatActivity() {
 
         btnAppend.setOnClickListener {
             if (!hasResult || outputBytes == null) {
-                txtResult.text = "Сначала выполните Convert"
+                txtResult.text = "Сначала выполните конвертацию"
                 return@setOnClickListener
             }
             if (inputKind != InputKind.GPX) {
-                txtResult.text = "Append работает только с GPX файлами"
+                txtResult.text = "Добавление работает только с GPX файлами"
                 return@setOnClickListener
             }
-            txtResult.text = "Выберите target .ms файл..."
+            txtResult.text = "Выберите целевой .ms файл..."
             pickAppendTarget.launch(arrayOf("*/*"))
         }
 
@@ -213,7 +213,7 @@ class MainActivity : AppCompatActivity() {
         btnShare.setOnClickListener {
             val uri = lastExportUri
             if (!hasResult || uri == null) {
-                txtResult.text = "Сначала сохраните файл (Save)"
+                txtResult.text = "Сначала сохраните файл (Сохранить)"
                 return@setOnClickListener
             }
 
@@ -300,7 +300,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * Основная функция конвертации (вместо Python)
+     * Основная функция конвертации
      */
     private fun doConvert() {
         val uri = pickedUri ?: run {
@@ -347,7 +347,6 @@ class MainActivity : AppCompatActivity() {
 
             txtResult.text = "Конвертация...\nОбрабатываем"
 
-            // ВЫЗЫВАЕМ НАШ КОНВЕРТЕР ВМЕСТО PYTHON - ИСПРАВЛЕНО!
             val result = GpxMsConverter.convert(
                 inputFile = inFile,
                 outputFile = outFile,
@@ -384,9 +383,7 @@ class MainActivity : AppCompatActivity() {
     /**
      * Append: добавление к существующему MS
      */
-    /**
-     * Append: добавление к существующему MS
-     */
+
     private fun doAppend(appendUri: Uri, targetName: String) {
         // Объявляем переменные в начале функции
         val targetFile: File
@@ -404,7 +401,7 @@ class MainActivity : AppCompatActivity() {
 
             txtResult.text = "Append...\nTarget файл скопирован: ${targetFile.exists()}, путь: ${targetFile.absolutePath}"
 
-            // ИСПРАВЛЕНИЕ: используем сохраненный GPX файл
+            // используем сохраненный GPX файл
             val gpxFile = currentGpxFile ?: run {
                 txtResult.text = "Сначала выполните Convert с GPX файлом"
                 return
@@ -468,7 +465,7 @@ class MainActivity : AppCompatActivity() {
         outputBytes = null
         hasResult = false
         lastExportUri = null
-        currentGpxFile = null  // <-- добавить
+        currentGpxFile = null
         updateButtons()
     }
 
