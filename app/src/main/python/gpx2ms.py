@@ -10,8 +10,8 @@ import traceback
 from dataclasses import dataclass
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Signal, Slot, QSettings
+from PySide6.QtGui import QDragEnterEvent, QDropEvent, QColor
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -24,6 +24,9 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QMessageBox,
     QGroupBox,
+    QColorDialog,
+    QFrame,
+    QCheckBox,
 )
 
 
@@ -92,11 +95,28 @@ def is_supported_input(path: str) -> bool:
     return lower.endswith(".gpx") or lower.endswith(".ms")
 
 
+def is_ms_output_path(path: str) -> bool:
+    return path.strip().lower().endswith(".ms")
+
+
+def normalize_hex_color(s: str) -> str:
+    """
+    Accept #RRGGBB or #AARRGGBB. If invalid -> default cyan.
+    """
+    t = (s or "").strip()
+    if len(t) == 7 and t.startswith("#"):
+        return t.upper()
+    if len(t) == 9 and t.startswith("#"):
+        return t.upper()
+    return "#00FFFF"
+
+
 @dataclass
 class RunRequest:
     input_path: str
     output_path: str
     append: bool = False
+    style: str = ""  # "" means default/keep existing (see converter3.py semantics)
 
 
 class WorkerSignals(QObject):
@@ -120,13 +140,14 @@ class ConvertWorker(QRunnable):
         try:
             self.signals.log.emit(f"[{ts()}] START append={self.req.append}")
 
-            # Import inside worker: PyInstaller needs --hidden-import converter3 (see build notes)
+            # Import inside worker: PyInstaller needs --hidden-import converter3
             import converter3  # type: ignore
 
             res = converter3.convert_file(  # type: ignore[attr-defined]
                 self.req.input_path,
                 self.req.output_path,
                 append=bool(self.req.append),
+                style=self.req.style,
             )
 
             msg = getattr(res, "message", "Done.")
@@ -155,6 +176,19 @@ class MainWindow(QWidget):
         self.btn_convert = QPushButton("Convert")
         self.btn_append = QPushButton("Append into existing .ms…")
 
+        # Color UI
+        self.btn_color = QPushButton("Color…")
+        self.color_swatch = QFrame()
+        self.color_swatch.setFixedSize(18, 18)
+        self.color_swatch.setFrameShape(QFrame.Shape.StyledPanel)
+        self.color_swatch.setFrameShadow(QFrame.Shadow.Sunken)
+
+        self.chk_apply_color_on_append = QCheckBox("Apply color on append")
+        self.chk_apply_color_on_append.setToolTip(
+            "If enabled, append will overwrite <style> in the target .ms (recolors the whole file). "
+            "If disabled, append keeps the existing style."
+        )
+
         self.btn_open_output = QPushButton("Open output")
         self.btn_open_folder = QPushButton("Open output folder")
         self.btn_clear_log = QPushButton("Clear log")
@@ -177,6 +211,15 @@ class MainWindow(QWidget):
 
         # Last output path (for open buttons)
         self._last_output_path: str | None = None
+
+        # Settings (persist color + checkbox)
+        self.settings = QSettings("GPX2MS", "gpx2ms")
+        saved_color = self.settings.value("color_hex", "#00FFFF")
+        self.color_hex = normalize_hex_color(str(saved_color))
+        saved_apply = self.settings.value("apply_color_on_append", False)
+        self.chk_apply_color_on_append.setChecked(bool(saved_apply))
+
+        self.apply_color_swatch(self.color_hex)
 
         # Layout
         root = QVBoxLayout(self)
@@ -202,6 +245,19 @@ class MainWindow(QWidget):
         actions = QHBoxLayout(box_actions)
         actions.addWidget(self.btn_convert)
         actions.addWidget(self.btn_append)
+
+        actions.addSpacing(18)
+        actions.addWidget(self.btn_color)
+
+        sw_wrap = QHBoxLayout()
+        sw_wrap.setContentsMargins(0, 0, 0, 0)
+        sw_wrap.addWidget(self.color_swatch)
+        sw_wrap.addStretch(1)
+        actions.addLayout(sw_wrap)
+
+        actions.addSpacing(12)
+        actions.addWidget(self.chk_apply_color_on_append)
+
         actions.addStretch(1)
         root.addWidget(box_actions)
 
@@ -228,6 +284,10 @@ class MainWindow(QWidget):
         self.btn_pick_output.clicked.connect(self.pick_output)
         self.btn_convert.clicked.connect(self.on_convert)
         self.btn_append.clicked.connect(self.on_append)
+
+        self.btn_color.clicked.connect(self.on_pick_color)
+        self.chk_apply_color_on_append.stateChanged.connect(self.on_apply_color_on_append_changed)
+
         self.btn_open_output.clicked.connect(self.on_open_output)
         self.btn_open_folder.clicked.connect(self.on_open_folder)
         self.btn_clear_log.clicked.connect(self.on_clear_log)
@@ -283,7 +343,12 @@ class MainWindow(QWidget):
         self.btn_convert.setEnabled(not busy and self.can_convert())
         self.btn_append.setEnabled(not busy and self.can_append())
 
-        self.btn_open_output.setEnabled((not busy) and bool(self._last_output_path) and os.path.exists(self._last_output_path or ""))
+        self.btn_color.setEnabled(not busy)
+        self.chk_apply_color_on_append.setEnabled(not busy)
+
+        self.btn_open_output.setEnabled(
+            (not busy) and bool(self._last_output_path) and os.path.exists(self._last_output_path or "")
+        )
         self.btn_open_folder.setEnabled((not busy) and bool(self._last_output_path))
 
     def can_convert(self) -> bool:
@@ -298,6 +363,25 @@ class MainWindow(QWidget):
     def set_summary(self, added: int | None, skipped: int | None):
         self.lbl_added.setText(f"Added: {added if added is not None else '—'}")
         self.lbl_skipped.setText(f"Duplicates skipped: {skipped if skipped is not None else '—'}")
+
+    def apply_color_swatch(self, hex_color: str) -> None:
+        c = normalize_hex_color(hex_color)
+        self.color_swatch.setStyleSheet(f"background-color: {c}; border: 1px solid rgba(0,0,0,0.25);")
+
+    def pick_color_hex(self) -> str:
+        # QColorDialog expects #RRGGBB; ignore alpha if present
+        initial = normalize_hex_color(self.color_hex)
+        initial_rgb = initial
+        if len(initial_rgb) == 9:  # #AARRGGBB
+            initial_rgb = "#" + initial_rgb[3:]
+        q0 = QColor(initial_rgb)
+
+        col = QColorDialog.getColor(q0, self, "Objects color")
+        if not col.isValid():
+            return self.color_hex
+
+        # store as #RRGGBB
+        return col.name(QColor.NameFormat.HexRgb).upper()
 
     # ---------- file pickers ----------
 
@@ -336,7 +420,44 @@ class MainWindow(QWidget):
             return
         self.output_edit.setText(path)
 
+    # ---------- color ----------
+
+    @Slot()
+    def on_pick_color(self):
+        new_hex = self.pick_color_hex()
+        new_hex = normalize_hex_color(new_hex)
+        if new_hex == self.color_hex:
+            return
+        self.color_hex = new_hex
+        self.apply_color_swatch(self.color_hex)
+        self.settings.setValue("color_hex", self.color_hex)
+        self.log(f"[{ts()}] Color set to {self.color_hex}")
+
+    @Slot()
+    def on_apply_color_on_append_changed(self):
+        self.settings.setValue("apply_color_on_append", self.chk_apply_color_on_append.isChecked())
+
     # ---------- runner ----------
+
+    def _style_for_request(self, req: RunRequest) -> str:
+        """
+        converter3.py semantics:
+          - GPX->MS convert: pass "#RRGGBB" (converter expands to MapCSS).
+          - GPX->MS append: style="" keeps existing style; pass color only if checkbox enabled.
+          - MS->GPX: ignore style (pass "").
+        """
+        out_is_ms = is_ms_output_path(req.output_path)
+        inp_is_gpx = req.input_path.strip().lower().endswith(".gpx")
+
+        if not out_is_ms:
+            return ""  # MS->GPX
+
+        if not req.append:
+            return self.color_hex
+
+        if self.chk_apply_color_on_append.isChecked() and inp_is_gpx:
+            return self.color_hex
+        return ""  # keep existing MS style
 
     def start_worker(self, req: RunRequest):
         if self._busy:
@@ -348,6 +469,8 @@ class MainWindow(QWidget):
 
         self.set_summary(None, None)
         self._last_output_path = req.output_path
+
+        req.style = self._style_for_request(req)
 
         worker = ConvertWorker(req)
         worker.signals.log.connect(self.log)
@@ -424,7 +547,7 @@ class MainWindow(QWidget):
 def main():
     app = QApplication(sys.argv)
     w = MainWindow()
-    w.resize(900, 620)
+    w.resize(980, 650)
     w.show()
     sys.exit(app.exec())
 
