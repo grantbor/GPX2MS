@@ -1,4 +1,4 @@
-package com.example.gpx2ms
+package io.github.grantbor.gpx2ms
 
 import org.junit.Test
 

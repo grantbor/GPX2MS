@@ -1,10 +1,33 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<resources>
     <style name="Theme.GPX2MS" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">@color/md_theme_light_primary</item>
-        <item name="colorOnPrimary">@color/md_theme_light_onPrimary</item>
-        <item name="colorSecondary">@color/md_theme_light_secondary</item>
-        <item name="colorOnSecondary">@color/md_theme_light_onSecondary</item>
-        <item name="android:windowBackground">@color/md_theme_light_background</item>
+        <!-- Primary brand color - оранжевый -->
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorPrimaryVariant">@color/primary_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+
+        <!-- Secondary brand color -->
+        <item name="colorSecondary">#03DAC5</item>
+        <item name="colorSecondaryVariant">#018786</item>
+        <item name="colorOnSecondary">@color/black</item>
+
+        <!-- Background colors для светлой темы -->
+        <item name="android:windowBackground">@color/background_light</item>
+        <item name="android:colorBackground">@color/background_light</item>
+
+        <!-- Surface color для карточек -->
+        <item name="android:colorBackgroundFloating">@color/white</item>
+
+        <!-- Цвет текста -->
+        <item name="android:textColorPrimary">#DE000000</item>
+        <item name="android:textColorSecondary">#8A000000</item>
+
+        <!-- Цвет обводки для кнопок -->
+        <item name="colorControlHighlight">@color/primary</item>
+
+        <!-- Стиль для кнопок -->
+        <item name="materialButtonStyle">@style/Widget.Material3.Button</item>
+
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 </resources>

@@ -1,130 +1,201 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true"
-    android:padding="16dp">
+    android:orientation="vertical"
+    android:background="?android:colorBackground"
+    android:fitsSystemWindows="true">
 
-    <com.google.android.material.card.MaterialCardView
+    <!-- Заголовок приложения -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:cardCornerRadius="20dp"
-        app:cardElevation="2dp"
-        app:cardUseCompatPadding="true">
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="20dp"
+        android:paddingBottom="12dp"
+        android:background="?colorPrimary">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/app_name"
+            android:textSize="22sp"
+            android:textStyle="bold"
+            android:textColor="@android:color/white"
+            android:letterSpacing="0.1" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/app_version"
+            android:textSize="14sp"
+            android:textColor="#B3FFFFFF"
+            android:layout_marginEnd="8dp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="20dp">
+            android:gravity="center_vertical"
+            android:layout_gravity="center">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnPick"
-                style="@style/Widget.Material3.Button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/btn_pick"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/txtPicked"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:paddingTop="10dp"
-                android:text="@string/file_not_selected" />
-
-            <!-- Convert + Color picker overlay -->
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnConvert"
-                    style="@style/Widget.Material3.Button"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/btn_convert"
-                    android:textSize="15sp"
-                    android:paddingEnd="72dp" />
-
-                <!-- круглый пикер поверх кнопки -->
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/btnPickColor"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:layout_marginEnd="2dp"
-                    android:clickable="true"
-                    android:focusable="true"
-                    app:cardCornerRadius="999dp"
-                    app:cardElevation="0dp"
-                    app:strokeColor="@android:color/black"
-                    app:strokeWidth="7dp">
-
-                    <View
-                        android:id="@+id/viewColorSwatch"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        android:layout_margin="7dp"
-                        android:background="#00FFFF" />
-                </com.google.android.material.card.MaterialCardView>
-
-            </FrameLayout>
-
-            <Button
-                android:id="@+id/btnSave"
-                style="@style/Widget.Material3.Button.OutlinedButton"
+            <com.google.android.material.card.MaterialCardView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:enabled="false"
-                android:text="@string/btn_save"
-                app:strokeColor="@color/outlined_button_stroke"
-                android:textColor="@color/outlined_button_text"
-                android:textSize="15sp" />
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="2dp"
+                app:cardUseCompatPadding="true"
+                app:cardBackgroundColor="?android:colorBackgroundFloating">
 
-            <Button
-                android:id="@+id/btnAppend"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:enabled="false"
-                android:text="@string/append_into_target"
-                app:strokeColor="@color/outlined_button_stroke"
-                android:textColor="@color/outlined_button_text"
-                android:textSize="15sp" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp">
 
-            <Button
-                android:id="@+id/btnOpenGuru"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:enabled="true"
-                android:text="@string/openGuru"
-                app:strokeColor="@color/outlined_button_guru"
-                android:textColor="@color/outlined_button_text"
-                android:textSize="15sp" />
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnPick"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_pick"
+                        android:textSize="15sp"
+                        android:textAllCaps="false" />
 
-            <Button
-                android:id="@+id/btnShare"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:enabled="true"
-                android:text="@string/btn_share"
-                app:strokeColor="@color/outlined_button_share"
-                android:textColor="@color/outlined_button_text"
-                android:textSize="15sp" />
+                    <TextView
+                        android:id="@+id/txtPicked"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:paddingTop="10dp"
+                        android:paddingBottom="10dp"
+                        android:text="@string/file_not_selected"
+                        android:textColor="?android:textColorSecondary"
+                        android:textSize="14sp" />
 
-            <TextView
-                android:id="@+id/txtResult"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="14dp"
-                android:text="" />
+                    <!-- Convert + Color picker overlay -->
+                    <FrameLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp">
 
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnConvert"
+                        style="@style/Widget.Material3.Button"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_convert"
+                        android:textSize="15sp"
+                        android:textAllCaps="false"
+                        android:backgroundTint="@color/primary"
+                        android:gravity="center" />
+
+
+                        <com.google.android.material.card.MaterialCardView
+                            android:id="@+id/btnPickColor"
+                            android:layout_width="36dp"
+                            android:layout_height="36dp"
+                            android:layout_gravity="end|center_vertical"
+                            android:layout_marginEnd="2dp"
+                            android:clickable="true"
+                            android:focusable="true"
+                            app:cardBackgroundColor="?android:colorBackgroundFloating"
+                            app:cardCornerRadius="999dp"
+                            app:cardElevation="0dp"
+                            app:strokeColor="?android:textColorSecondary"
+                            app:strokeWidth="1dp">
+
+                            <View
+                                android:id="@+id/viewColorSwatch"
+                                android:layout_width="15dp"
+                                android:layout_height="16dp"
+                                android:layout_margin="10dp"
+                                android:background="#00FFFF" />
+                        </com.google.android.material.card.MaterialCardView>
+
+                     </FrameLayout>
+
+                    <Button
+                        android:id="@+id/btnSave"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="16dp"
+                        android:enabled="false"
+                        android:text="@string/btn_save"
+                        android:textColor="?android:textColorPrimary"
+                        android:textSize="15sp"
+                        android:textAllCaps="false"
+                        app:strokeColor="?colorPrimary"
+                        app:strokeWidth="1dp" />
+
+                    <Button
+                        android:id="@+id/btnAppend"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:enabled="false"
+                        android:text="@string/append_into_target"
+                        android:textColor="?android:textColorPrimary"
+                        android:textSize="15sp"
+                        android:textAllCaps="false"
+                        app:strokeColor="?colorPrimary"
+                        app:strokeWidth="1dp" />
+
+                    <Button
+                        android:id="@+id/btnOpenGuru"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:enabled="true"
+                        android:text="@string/openGuru"
+                        android:textColor="?android:textColorPrimary"
+                        android:textSize="15sp"
+                        android:textAllCaps="false"
+                        app:strokeColor="@color/outlined_button_guru"
+                        app:strokeWidth="1dp" />
+
+                    <Button
+                        android:id="@+id/btnShare"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:enabled="true"
+                        android:text="@string/btn_share"
+                        android:textColor="?android:textColorPrimary"
+                        android:textSize="15sp"
+                        android:textAllCaps="false"
+                        app:strokeColor="@color/outlined_button_share"
+                        app:strokeWidth="1dp" />
+
+                    <TextView
+                        android:id="@+id/txtResult"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:padding="12dp"
+                        android:text=""
+                        android:textSize="14sp"
+                        android:textColor="?android:textColorPrimary"
+                        android:visibility="visible" />
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
-    </com.google.android.material.card.MaterialCardView>
-</ScrollView>
+    </ScrollView>
+</LinearLayout>

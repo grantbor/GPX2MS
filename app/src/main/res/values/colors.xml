@@ -1,21 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="md_theme_light_primary">#ffff6600</color>   <!-- синий -->
-    <color name="md_theme_light_onPrimary">#FFFFFF</color>
-    <color name="md_theme_light_secondary">#06B6D4</color> <!-- бирюзовый -->
-    <color name="md_theme_light_onSecondary">#FFFFFF</color>
-    <color name="md_theme_light_background">#F7F7FB</color>
-    <color name="md_theme_light_onBackground">#111827</color>
-    <color name="md_theme_light_surface">#FFFFFF</color>
-    <color name="md_theme_light_onSurface">#111827</color>
+    <!-- Основной цвет приложения (оранжевый) -->
+    <color name="primary">#FF5722</color>
+    <color name="primary_dark">#F57C00</color>
+    <color name="primary_light">#FFE0B2</color>
 
-    <color name="md_theme_dark_primary">#ffff6600</color>
-    <color name="md_theme_dark_onPrimary">#FFFFFF</color>
-    <color name="md_theme_dark_secondary">#22D3EE</color>
-    <color name="md_theme_dark_onSecondary">#0B1220</color>
-    <color name="md_theme_dark_background">#0B1220</color>
-    <color name="md_theme_dark_onBackground">#E5E7EB</color>
-    <color name="md_theme_dark_surface">#111827</color>
-    <color name="md_theme_dark_onSurface">#E5E7EB</color>
-    <color name="orange">#ffff6600</color>
+    <!-- Цвета для кнопок -->
+    <color name="button_convert_bg">#FF5722</color>
+    <color name="button_convert_text">#FFFFFF</color>
+
+    <!-- Цвета для outlined кнопок (будут меняться в темах) -->
+    <color name="button_outlined_stroke">#FF5722</color>
+    <color name="button_outlined_guru">#4CAF50</color>
+    <color name="button_outlined_share">#FF5722</color>
+
+
+    <!-- Дополнительные цвета -->
+    <color name="white">#FFFFFFFF</color>
+    <color name="black">#FF000000</color>
+    <color name="background_light">#F5F5F5</color>
+    <color name="background_dark">#121212</color>
 </resources>
