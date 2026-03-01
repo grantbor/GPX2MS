@@ -124,7 +124,7 @@ object MsParser {
         val lat = coords.optDouble(1, 0.0)
         val ele = if (coords.length() >= 3) coords.optDouble(2, 0.0) else 0.0
 
-        val name = properties.optString("name", "wpt")
+        val name = properties.optString("name", "Без имени")
         val time = properties.optString("time", null)
         val desc = properties.optString("desc", null)
         val sym = properties.optString("sym", null)

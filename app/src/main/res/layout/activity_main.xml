@@ -141,7 +141,7 @@
                         android:textColor="?android:textColorPrimary"
                         android:textSize="15sp"
                         android:textAllCaps="false"
-                        app:strokeColor="?colorPrimary"
+                        app:strokeColor="@color/outlined_button_save"
                         app:strokeWidth="1dp" />
 
                     <Button
@@ -154,7 +154,7 @@
                         android:textColor="?android:textColorPrimary"
                         android:textSize="15sp"
                         android:textAllCaps="false"
-                        app:strokeColor="?colorPrimary"
+                        app:strokeColor="@color/outlined_button_save"
                         app:strokeWidth="1dp" />
 
                     <Button

@@ -18,13 +18,13 @@ android {
         applicationId = "io.github.grantbor.gpx2ms"
         minSdk = 24
         targetSdk = 36
-        versionCode = 10
+        versionCode = 11
 
         ndk {
             abiFilters.add("arm64-v8a")
         }
 
-        resValue("string", "app_version", versionName ?: "1.0")
+        resValue("string", "app_version", versionName ?: "1.01")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

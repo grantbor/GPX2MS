@@ -147,7 +147,7 @@ object GpxParser {
         val lat = parser.getAttributeValue(null, "lat")?.toDoubleOrNull() ?: 0.0
         val lon = parser.getAttributeValue(null, "lon")?.toDoubleOrNull() ?: 0.0
 
-        var name = "wpt" // Значение по умолчанию
+        var name = "Без имени" // Значение по умолчанию
         var ele = 0.0
         var time: String? = null
         var desc: String? = null
@@ -157,7 +157,7 @@ object GpxParser {
         while (!(eventType == XmlPullParser.END_TAG && parser.name == "wpt")) {
             if (eventType == XmlPullParser.START_TAG) {
                 when (parser.name) {
-                    "name" -> name = parser.nextText().trim().ifEmpty { "wpt" }
+                    "name" -> name = parser.nextText().trim().ifEmpty { "Без имени" }
                     "ele" -> ele = parser.nextText().trim().toDoubleOrNull() ?: 0.0
                     "time" -> time = parser.nextText().trim()
                     "desc" -> desc = parser.nextText().trim()
